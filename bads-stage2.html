@@ -385,7 +385,30 @@ async function runVecV2(out){
     if(f===O.clip||f===O.eoClip||f===O.endPath){cur=[];continue;}
   }
   const isDark=c=>c&&Math.max(c[0],c[1],c[2])<=90;
-  const H=[],V=[];let cuN=0;
+  let H=[],V=[],cuN=0;
+  function mergeRuns(list,horiz){ // v4.6: bridge colinear gaps <100mm into runs
+    const bins=new Map();
+    list.forEach(s=>{const b=Math.round(((horiz?(s.y1+s.y2)/2:(s.x1+s.x2)/2))*mmPerPt/10)*10;if(!bins.has(b))bins.set(b,[]);bins.get(b).push(s);});
+    const out=[];
+    const a0=s=>horiz?Math.min(s.x1,s.x2):Math.min(s.y1,s.y2),a1=s=>horiz?Math.max(s.x1,s.x2):Math.max(s.y1,s.y2);
+    const cc=s=>horiz?(s.y1+s.y2)/2:(s.x1+s.x2)/2;
+    for(const arr of bins.values()){
+      arr.sort((a,b)=>a0(a)-a0(b));
+      let cur=null;
+      for(const s of arr){
+        if(cur&&(a0(s)-cur.a1)*mmPerPt<100){
+          cur.a1=Math.max(cur.a1,a1(s));
+          cur.x1=horiz?cur.a0:cc(s);cur.y1=horiz?cc(s):cur.a0;cur.x2=horiz?cur.a1:cc(s);cur.y2=horiz?cc(s):cur.a1;
+          if(s.w>cur.w)cur.w=s.w;
+        }else{
+          if(cur)out.push(cur);
+          cur={x1:horiz?a0(s):cc(s),y1:horiz?cc(s):a0(s),x2:horiz?a1(s):cc(s),y2:horiz?cc(s):a1(s),w:s.w,c:s.c,cu:0,a0:a0(s),a1:a1(s)};
+        }
+      }
+      if(cur)out.push(cur);
+    }
+    return out;
+  }
   for(const s of strokes){
     const dx=s.x2-s.x1,dy=s.y2-s.y1,len=Math.hypot(dx,dy);
     if(len<0.5)continue;
@@ -393,6 +416,7 @@ async function runVecV2(out){
     if(Math.abs(dy)<0.05*len+0.3)H.push(s);
     else if(Math.abs(dx)<0.05*len+0.3)V.push(s);
   }
+  H=mergeRuns(H,true);V=mergeRuns(V,false);
   const pairSearch=(list,horiz)=>{
     const arr=list.filter(s=>isDark(s.c));
     const key=s=>horiz?(s.y1+s.y2)/2:(s.x1+s.x2)/2;
@@ -489,6 +513,7 @@ async function runVecV2(out){
       });
     });
     cornerN=cornerMap.size;
+    window.__corners=[...cornerMap.values()].slice(0,3000).map(c=>({x:c.x,y:c.y}));
     const asmSeen=new Set();
     for(const c of cornerMap.values()){
       for(const hi of c.hs){const hc=hCorners.get(hi)||[];
@@ -543,7 +568,7 @@ async function runVecV2(out){
   const nearBand=dedup.filter(r=>{const l=Math.max(r.w,r.h);return l>=1500&&l<=2300;});
   const gapHist={};
   [...pH.gaps,...pV.gaps].forEach(g=>{const b=Math.floor(g/20)*20,k=b+'–'+(b+20);gapHist[k]=(gapHist[k]||0)+1;});
-  window.lastVec={mmPerPt,segments:strokes.length,cuN,rects,fills,beds,dedup,nearBand,asmCount:asm.length,cornerN,pH,pV,planesH,planesV};
+  window.lastVec={mmPerPt,segments:strokes.length,cuN,rects,fills,beds,dedup,nearBand,asmCount:asm.length,cornerN,corners:window.__corners||[],pH,pV,planesH,planesV};
   window.lastVecKey=fileName+'|'+document.getElementById('pageno').value;
   const topW=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([w,n])=>w+'pt×'+n).join(', ')||'—';
   let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V, '+cuN+' curve-out) · '+rects.length+' rects · '+cornerN+' corners · '+fills.length+' fills<br>';
@@ -580,6 +605,7 @@ function drawVec(){
   const box=(r,col)=>{ctx.strokeStyle=col;ctx.strokeRect(IX(r.x0),IY(r.y1),IX(r.x1)-IX(r.x0),IY(r.y0)-IY(r.y1));};
   (LV.nearBand||[]).forEach(r=>box(r,'rgba(255,193,7,0.9)'));
   (LV.beds||[]).forEach(r=>box(r,'rgba(0,200,83,0.95)'));
+  (LV.corners||[]).forEach(p=>{ctx.fillStyle='rgba(255,0,255,0.65)';ctx.fillRect(IX(p.x)-2,IY(p.y)-2,4,4);});
   ctx.restore();
 }
 // ---------- v4: wall-fit — grow boxes to nearest inner-face planes ----------

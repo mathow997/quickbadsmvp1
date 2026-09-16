@@ -161,6 +161,12 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
 - Corner tol 2→20mm; corner count printed. Real bed still not assembling — overlay shows where
   its lines go missing.
 
+## 2026-09-16 — v4.6: gap-bridging + corner dots (built, pushed)
+
+- Overlay verdict: legend filtered, bedroom has no yellow at all — bed lines don't meet.
+  Fix: merge colinear runs across <100mm gaps before cornering (10mm bins).
+- Corners plotted magenta (capped 3000) — next screenshot shows whether the bedroom rings.
+
 ## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
 
 - INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.
