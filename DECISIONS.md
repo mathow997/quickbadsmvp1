@@ -85,6 +85,50 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
   segments (assembly proved necessary); entry door swing visible (future unit signal);
   balcony decking explains FH V-heavy segments.
 
+## 2026-09-16 — FH v3 dump (unpushed; ships with v4)
+
+- Beds 3→1 (1530×2040 sup4): dedupe + support≥2 work exactly as designed. 1266×2112 sup0
+  (table) and 600×1870 sup1 (robe) correctly excluded. Unexplained: 2000×2300 closed sup4.
+- normC fix confirmed (fills read 255/25/35 properly). Side effect: 85-grey strokes now count
+  dark (555→595 dark H) — consider tightening dark to ≤60 in v4 (walls are black; 85 is furniture).
+- Gap histogram is readable-but-flat (60–120 furniture+stud band, 200–220 and 300–320 wall
+  bumps). Peaks usable as priors, not sole signal.
+- Dark fills ARE walls, directly: 8700×300, 3800×300, 4500×200 etc. v4 fits boxes to these +
+  wall pairs instead of bed+800mm guesses.
+
+## 2026-09-16 — A01 v3 dump (unpushed; ships with v4)
+
+- Bed 0→1 (1600×1800 open sup4): unclosed assembly works. 1800 long is short of a real queen
+  (2030) — likely bedding inner, not frame. Position right; size still gets dragged. Fine.
+- Gap histogram SHARP on Revit: 80–100×297 (stud ~90), 200–240×398 (concrete ~210–230).
+  Self-calibration validated — peaks, not widths, carry wall identity on both sheets.
+- Dark fills confirm 100mm + 200mm solid walls (6600×200, 5500×100…).
+- Dark threshold stays 90 (histogram does the filtering; tightening deferred until furniture
+  demonstrably corrupts a fit). 1000×2000 sup0 correctly excluded (wardrobe/desk).
+- v4 = wall-fit: grow seeded boxes to nearest enclosing dark lines/fills, cap 6000mm/side,
+  keep seeded size when no wall in range (open-plan side). Robe auto-seed deferred.
+
+## 2026-09-16 — v4 built (planes + fit, pushed)
+
+- Curve-derived segments tagged (cu=1), excluded from H/V — hence from pairing, planes and
+  assembly. Counted separately (cuN) to preserve the future entry-door signal.
+- Planes: dark fill edges (len>200mm) + dark strokes ≥0.6pt, 30mm colinear merge, union extents
+  (span openings), support = summed length. Fit needs sup≥1000mm, side ≤4500mm away, axis ≤6000.
+- Caught pre-push: span-check vs distance axes were mixed in pick() — separated.
+- Auto-measure now seeds→fits→checks in one click; manual "Fit to walls" button added.
+
+## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
+
+- INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.
+  Never pair-midline, never outer face. (Implementation already does this; now a logged rule.)
+- Door openings: wall is interrupted but the box follows the WALL PLANE across the gap —
+  so fit to colinear-merged planes (30mm merge, union extents), not nearest segments.
+  Door-swing arcs explicitly ignored: tag curve-derived segments, exclude from planes.
+- Robe fronts non-critical: near-flush acceptable, minimums met is what counts. No robe
+  auto-precision work; fraction defaults + drag stand.
+- Wall evidence priority: dark fill edges (unambiguous poche) first, then dark strokes
+  ≥0.6pt (excludes 0.24–0.43 furniture hairlines; FH thin outlines covered via its fills).
+
 ## 2026-09-16 — FH C-solo v2 dump
 
 - 6763 segs (922 H / 2570 V — V-heavy, cause unknown: mullions? battens?).

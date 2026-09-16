@@ -329,8 +329,8 @@ async function runVecV2(out){
   };
   const commit=kind=>{
     if(!cur.length){cur=[];return;}
-    if(kind==='stroke'){for(const sp of cur)for(let i=1;i<sp.length;i++)strokes.push({x1:sp[i-1][0],y1:sp[i-1][1],x2:sp[i][0],y2:sp[i][1],w:lw,c:sc});}
-    else{let x0=1e18,y0=1e18,x1=-1e18,y1=-1e18;cur.forEach(sp=>sp.forEach(p=>{x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);}));if(x1>x0&&y1>y0)fills.push({x0,y0,x1,y1,c:fc});}
+    if(kind==='stroke'){for(const sp of cur)for(let i=1;i<sp.pts.length;i++)strokes.push({x1:sp.pts[i-1][0],y1:sp.pts[i-1][1],x2:sp.pts[i][0],y2:sp.pts[i][1],w:lw,c:sc,cu:(sp.q[i-1]||sp.q[i])?1:0});}
+    else{let x0=1e18,y0=1e18,x1=-1e18,y1=-1e18;cur.forEach(sp=>sp.pts.forEach(p=>{x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);}));if(x1>x0&&y1>y0)fills.push({x0,y0,x1,y1,c:fc});}
     cur=[];
   };
   const P=(x,y)=>P0(ctm,x,y);
@@ -348,19 +348,20 @@ async function runVecV2(out){
     if(f===O.setFillColor||f===O.setFillGray){const c=normC(a);if(c)fc=c;continue;}
     if(f===O.constructPath){
       const ops=a[0]||[],vals=a[1]||[];let j=0,cp=null;
+      const orphan=p=>{cp={pts:[p],q:[false]};cur.push(cp);};
       for(const o of ops){
-        if(o===O.rectangle){const x=vals[j++],y=vals[j++],w=vals[j++],h=vals[j++];const p1=P(x,y),p2=P(x+w,y),p3=P(x+w,y+h),p4=P(x,y+h);cur.push([p1,p2,p3,p4,p1]);pushRect(p1[0],p1[1],p3[0],p3[1]);cp=null;}
-        else if(o===O.moveTo){cp=[P(vals[j++],vals[j++])];cur.push(cp);}
-        else if(o===O.lineTo){const p=P(vals[j++],vals[j++]);if(!cp){cp=[p];cur.push(cp);}else cp.push(p);}
-        else if(o===O.curveTo){const cx1=vals[j],cy1=vals[j+1],cx2=vals[j+2],cy2=vals[j+3];j+=4;const ex=vals[j++],ey=vals[j++];const p=P(ex,ey);if(!cp){cp=[P(cx1,cy1),p];cur.push(cp);}else{cp.push(P(cx1,cy1),P(cx2,cy2),p);}}
-        else if(o===O.curveTo2||o===O.curveTo3){const cx1=vals[j],cy1=vals[j+1];j+=2;const ex=vals[j++],ey=vals[j++];const p=P(ex,ey);if(!cp){cp=[P(cx1,cy1),p];cur.push(cp);}else{cp.push(P(cx1,cy1),p);}}
+        if(o===O.rectangle){const x=vals[j++],y=vals[j++],w=vals[j++],h=vals[j++];const p1=P(x,y),p2=P(x+w,y),p3=P(x+w,y+h),p4=P(x,y+h);cur.push({pts:[p1,p2,p3,p4,p1],q:[false,false,false,false,false]});pushRect(p1[0],p1[1],p3[0],p3[1]);cp=null;}
+        else if(o===O.moveTo){const mx=vals[j++],my=vals[j++];cp={pts:[P(mx,my)],q:[false]};cur.push(cp);}
+        else if(o===O.lineTo){const p=P(vals[j++],vals[j++]);if(!cp){orphan(p);}else{cp.pts.push(p);cp.q.push(false);}}
+        else if(o===O.curveTo){const cx1=vals[j],cy1=vals[j+1],cx2=vals[j+2],cy2=vals[j+3];j+=4;const ex=vals[j++],ey=vals[j++];const p=P(ex,ey);if(!cp){cp={pts:[P(cx1,cy1),p],q:[true,true]};cur.push(cp);}else{cp.pts.push(P(cx1,cy1),P(cx2,cy2),p);cp.q.push(true,true,true);}}
+        else if(o===O.curveTo2||o===O.curveTo3){const cx1=vals[j],cy1=vals[j+1];j+=2;const ex=vals[j++],ey=vals[j++];const p=P(ex,ey);if(!cp){cp={pts:[P(cx1,cy1),p],q:[true,true]};cur.push(cp);}else{cp.pts.push(P(cx1,cy1),p);cp.q.push(true,true);}}
         else if(o===O.closePath){
-          if(cp&&(cp.length===4||cp.length===5)){
-            const q=cp.length===5?cp.slice(0,4):cp;let ok=true;
+          if(cp&&(cp.pts.length===4||cp.pts.length===5)){
+            const q=cp.pts.length===5?cp.pts.slice(0,4):cp.pts;let ok=true;
             for(let k=0;k<4;k++){const u=q[k],v=q[(k+1)%4];const hz=Math.abs(u[1]-v[1])<1.5,vt=Math.abs(u[0]-v[0])<1.5;if(hz===vt){ok=false;break;}}
             if(ok)pushRect(q[0][0],q[0][1],q[2][0],q[2][1]);
           }
-          if(cp&&cp.length>2)cp.push(cp[0].slice());
+          if(cp&&cp.pts.length>2){cp.pts.push(cp.pts[0].slice());cp.q.push(false);}
           cp=null;
         }
       }
@@ -371,10 +372,11 @@ async function runVecV2(out){
     if(f===O.clip||f===O.eoClip||f===O.endPath){cur=[];continue;}
   }
   const isDark=c=>c&&Math.max(c[0],c[1],c[2])<=90;
-  const H=[],V=[];
+  const H=[],V=[];let cuN=0;
   for(const s of strokes){
     const dx=s.x2-s.x1,dy=s.y2-s.y1,len=Math.hypot(dx,dy);
     if(len<0.5)continue;
+    if(s.cu){cuN++;continue;} // v4: curve-derived (door swings etc.) excluded from walls
     if(Math.abs(dy)<0.05*len+0.3)H.push(s);
     else if(Math.abs(dx)<0.05*len+0.3)V.push(s);
   }
@@ -398,6 +400,41 @@ async function runVecV2(out){
     return{pairs,wHist,n:arr.length,gaps};
   };
   const pH=pairSearch(H,true),pV=pairSearch(V,false);
+  // ----- v4: wall planes — dark fill edges + dark strokes >=0.6pt, arcs out, 30mm merge -----
+  const candH=[],candV=[];
+  fills.forEach(f=>{
+    if(!isDark(f.c))return;
+    const w=(f.x1-f.x0)*mmPerPt,h=(f.y1-f.y0)*mmPerPt;
+    if(w>200){candH.push({c:f.y0,a0:f.x0,a1:f.x1,len:w});candH.push({c:f.y1,a0:f.x0,a1:f.x1,len:w});}
+    if(h>200){candV.push({c:f.x0,a0:f.y0,a1:f.y1,len:h});candV.push({c:f.x1,a0:f.y0,a1:f.y1,len:h});}
+  });
+  H.forEach(s=>{
+    if(!isDark(s.c)||s.w<0.6)return;
+    const len=Math.hypot(s.x2-s.x1,s.y2-s.y1)*mmPerPt;
+    if(len<200)return;
+    candH.push({c:(s.y1+s.y2)/2,a0:Math.min(s.x1,s.x2),a1:Math.max(s.x1,s.x2),len});
+  });
+  V.forEach(s=>{
+    if(!isDark(s.c)||s.w<0.6)return;
+    const len=Math.hypot(s.x2-s.x1,s.y2-s.y1)*mmPerPt;
+    if(len<200)return;
+    candV.push({c:(s.x1+s.x2)/2,a0:Math.min(s.y1,s.y2),a1:Math.max(s.y1,s.y2),len});
+  });
+  const cluster=list=>{
+    list.sort((a,b)=>a.c-b.c);
+    const planes=[];
+    for(const s of list){
+      const last=planes[planes.length-1];
+      if(last&&(s.c-last.c)*mmPerPt<=30){
+        const wsum=last.sup+s.len;
+        last.c=(last.c*last.sup+s.c*s.len)/wsum;
+        last.a0=Math.min(last.a0,s.a0);last.a1=Math.max(last.a1,s.a1);
+        last.sup=wsum;last.n++;
+      }else planes.push({c:s.c,a0:s.a0,a1:s.a1,sup:s.len,n:1});
+    }
+    return planes;
+  };
+  const planesH=cluster(candH),planesV=cluster(candV);
   // ----- v3: unclosed-rect assembly (2H+2V segs, endpoints within ~2mm) -----
   const tol=2/mmPerPt;
   const asm=[];
@@ -464,9 +501,10 @@ async function runVecV2(out){
   const nearBand=dedup.filter(r=>{const l=Math.max(r.w,r.h);return l>=1500&&l<=2300;});
   const gapHist={};
   [...pH.gaps,...pV.gaps].forEach(g=>{const b=Math.floor(g/20)*20,k=b+'–'+(b+20);gapHist[k]=(gapHist[k]||0)+1;});
-  window.lastVec={mmPerPt,segments:strokes.length,rects,fills,beds,dedup,asmCount:asm.length,pH,pV};
+  window.lastVec={mmPerPt,segments:strokes.length,cuN,rects,fills,beds,dedup,asmCount:asm.length,pH,pV,planesH,planesV};
   const topW=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([w,n])=>w+'pt×'+n).join(', ')||'—';
-  let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V) · '+rects.length+' rects · '+fills.length+' fills<br>';
+  let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V, '+cuN+' curve-out) · '+rects.length+' rects · '+fills.length+' fills<br>';
+  h2+='<b>Wall planes</b>: H='+planesH.length+' V='+planesV.length+' (fill edges + ≥0.6pt dark strokes, 30mm merge)<br>';
   h2+='<b>Wall pairs</b> (dark, parallel, 60–350mm apart, &gt;50% overlap): H='+pH.pairs+' (of '+pH.n+' dark H) V='+pV.pairs+' (of '+pV.n+' dark V)<br>';
   h2+='<small>paired widths H: '+topW(pH.wHist)+' · V: '+topW(pV.wHist)+'</small><br>';
   h2+='<b>Bed rects</b> ('+beds.length+' of '+dedup.length+' dedup, '+asm.length+' assembled-open): '+beds.slice(0,8).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+'mm sup'+b.support).join(' · ')+'<br>';
@@ -484,6 +522,39 @@ async function runVecV2(out){
   h2+='</table>';
   out.innerHTML+=h2;
 }
+
+// ---------- v4: wall-fit — grow boxes to nearest inner-face planes ----------
+function fitRoom(r){
+  const LV=window.lastVec;
+  if(!LV||!LV.planesH||!pxPerMm||!bg)return false;
+  const W=bg.width,H=bg.height,s=pxPerMm,ptW=W/RENDER,ptH=H/RENDER;
+  const toImgH=pt=>(ptH-pt)/ptH*H, toImgV=pt=>pt/ptW*W;
+  const pick=(planes,horiz,before)=>{
+    let best=null,bd=1e18;
+    for(const p of planes){
+      if(p.sup<1000)continue;
+      const pos=horiz?toImgH(p.c):toImgV(p.c);
+      const e0=horiz?toImgV(p.a0):toImgH(p.a0),e1=horiz?toImgV(p.a1):toImgH(p.a1);
+      const lo=Math.min(e0,e1),hi=Math.max(e0,e1);
+      const spanCtr=horiz?r.x:r.y,distCtr=horiz?r.y:r.x;
+      if(spanCtr<lo||spanCtr>hi)continue; // plane must span the seed (openings spanned via union)
+      const d=before?(distCtr-pos):(pos-distCtr);
+      if(d<0||d>4500*s)continue;
+      if(d<bd){bd=d;best=pos;}
+    }
+    return best;
+  };
+  const top=pick(LV.planesH,true,true),bot=pick(LV.planesH,true,false);
+  const lft=pick(LV.planesV,false,true),rgt=pick(LV.planesV,false,false);
+  let nx=r.x,ny=r.y,nw=r.wMm,nd=r.dMm,fitted=false;
+  if(top!=null&&bot!=null&&(bot-top)>500*s){ny=(top+bot)/2;nd=(bot-top)/s;fitted=true;}
+  if(lft!=null&&rgt!=null&&(rgt-lft)>500*s){nx=(lft+rgt)/2;nw=(rgt-lft)/s;fitted=true;}
+  if(!fitted)return false;
+  if(nw>6000||nd>6000)return false;
+  r.x=nx;r.y=ny;r.wMm=Math.round(nw);r.dMm=Math.round(nd);
+  return true;
+}
+function fitAll(silent){let n=0;rooms.forEach(r=>{if(fitRoom(r))n++;});if(!silent){draw();renderList();}return n;}
 
 // ---------- bedrooms-only auto-measure (no units: one apartment per PDF) ----------
 function mkRoom(type,label,wMm,dMm,fx,fy){return{id:uid++,type,label,x:bg.width*fx,y:bg.height*fy,wMm,dMm,rot:0};}
@@ -522,8 +593,10 @@ document.getElementById('autoBtn').onclick=()=>{
   if(wantBeds===2){excls.push(E('ROBE (excluded)',0.06,0.28,0.48,0.55));}
   if(wantBeds===3){excls.push(E('ROBE (excluded)',0.05,0.28,0.37,0.55));excls.push(E('ROBE (excluded)',0.05,0.28,0.63,0.55));}
   biggestIsMain();
+  let fitMsg='';
+  if(window.lastVec&&window.lastVec.planesH){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';}
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
-  document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+'Drag edges to wall inner faces; biggest auto-tagged MAIN.</small>';
+  document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN.</small>';
   draw();renderList();
 };
 
@@ -532,7 +605,8 @@ function renderList(){
   const el=document.getElementById('rooms');el.innerHTML='';
   const bc=document.createElement('div');bc.className='row';
   const bm=document.createElement('button');bm.textContent='Biggest bedroom = MAIN';bm.onclick=()=>{biggestIsMain();draw();renderList();};
-  bc.appendChild(bm);el.appendChild(bc);
+  const bf=document.createElement('button');bf.textContent='Fit to walls';bf.onclick=()=>{const n=fitAll();document.getElementById('autoMsg').innerHTML='<small>Fitted '+n+'/'+rooms.length+' boxes to inner wall faces.</small>';};
+  bc.appendChild(bm);bc.appendChild(bf);el.appendChild(bc);
   rooms.forEach((r,i)=>{
     const c=checkRoom(r);
     const d=document.createElement('div');d.className='roomrow';
