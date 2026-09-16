@@ -117,6 +117,16 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
 - Caught pre-push: span-check vs distance axes were mixed in pick() — separated.
 - Auto-measure now seeds→fits→checks in one click; manual "Fit to walls" button added.
 
+## 2026-09-16 — v4.1: off-target box fix (built, pushed)
+
+- Symptom: fitted box landed bottom-left off-sheet on trial A01 despite good seeds/planes.
+- Causes addressed: (1) `lastVec` never invalidated — inspecting sheet X then measuring sheet Y
+  used X's geometry. Now: render clears it, auto-measure re-parses when stale (keyed
+  file|page). Two-step dependency gone. (2) Sheet frame / title rules hijacking planes:
+  30mm page-margin exclusion on plane candidates. (3) Failures were silent: fit now records
+  per-side plane distances (mm) onto each room, printed in the auto message.
+- Added 📋 Copy inspector output (clipboard API + execCommand fallback for file://).
+
 ## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
 
 - INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.

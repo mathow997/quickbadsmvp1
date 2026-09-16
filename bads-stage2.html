@@ -37,6 +37,7 @@
   <div id="scaleOut"><small>Scale: not set.</small></div>
   <hr>
   <button id="inspectVec" style="font-weight:700;background:#e3f2fd;border:2px solid #1976d2;padding:10px">🔍 INSPECT VECTORS (what's actually in this PDF)</button>
+  <div class="row"><button id="copyVec">📋 Copy inspector output</button></div>
   <div id="vecOut"><small>No inspection yet — render a page, then inspect.</small></div>
   <hr>
   <label>Bedrooms in this apartment</label>
@@ -241,7 +242,7 @@ async function renderPdf(){
   const tmp=document.createElement('canvas');tmp.width=vp.width;tmp.height=vp.height;
   await page.render({canvasContext:tmp.getContext('2d'),viewport:vp}).promise;
   try{const tc=await page.getTextContent();lastText=tc.items.map(i=>({s:i.str,x:i.transform[4],y:i.transform[5]}));}catch(_){lastText=[];}
-  const img=new Image();img.onload=()=>{bg=img;fitView();autoScaleFromFooter();};img.src=tmp.toDataURL();
+  const img=new Image();img.onload=()=>{bg=img;window.lastVec=null;fitView();autoScaleFromFooter();};img.src=tmp.toDataURL();
 }
 document.getElementById('loadPdf').onclick=renderPdf;
 async function autoScaleFromFooter(){
@@ -262,6 +263,16 @@ function updateScale(msg){
 }
 function fitView(){if(!bg)return;view.s=Math.min(cv.width/bg.width,cv.height/bg.height)*0.95;view.ox=20;view.oy=20;draw();}
 
+document.getElementById('copyVec').onclick=async e=>{
+  const t=document.getElementById('vecOut').innerText||'';
+  const done=()=>{e.target.textContent='✓ Copied';setTimeout(()=>e.target.textContent='📋 Copy inspector output',1500);};
+  try{await navigator.clipboard.writeText(t);done();}
+  catch(_){
+    const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);
+    ta.select();try{document.execCommand('copy');done();}catch(__){alert('Copy failed — select manually.');}
+    ta.remove();
+  }
+};
 // ---------- vector inspector: dump what is actually inside the page ----------
 document.getElementById('inspectVec').onclick=async()=>{
   const out=document.getElementById('vecOut');
@@ -402,19 +413,25 @@ async function runVecV2(out){
   const pH=pairSearch(H,true),pV=pairSearch(V,false);
   // ----- v4: wall planes — dark fill edges + dark strokes >=0.6pt, arcs out, 30mm merge -----
   const candH=[],candV=[];
+  const mPt=30/mmPerPt,pgW=bg.width/RENDER,pgH=bg.height/RENDER; // v4.1: 30mm page-margin exclusion (sheet frame)
   fills.forEach(f=>{
+    if(f.x0<mPt||f.y0<mPt||f.x1>pgW-mPt||f.y1>pgH-mPt)return;
     if(!isDark(f.c))return;
     const w=(f.x1-f.x0)*mmPerPt,h=(f.y1-f.y0)*mmPerPt;
     if(w>200){candH.push({c:f.y0,a0:f.x0,a1:f.x1,len:w});candH.push({c:f.y1,a0:f.x0,a1:f.x1,len:w});}
     if(h>200){candV.push({c:f.x0,a0:f.y0,a1:f.y1,len:h});candV.push({c:f.x1,a0:f.y0,a1:f.y1,len:h});}
   });
   H.forEach(s=>{
+    const mx=(s.x1+s.x2)/2,my=(s.y1+s.y2)/2;
+    if(mx<mPt||my<mPt||mx>pgW-mPt||my>pgH-mPt)return;
     if(!isDark(s.c)||s.w<0.6)return;
     const len=Math.hypot(s.x2-s.x1,s.y2-s.y1)*mmPerPt;
     if(len<200)return;
     candH.push({c:(s.y1+s.y2)/2,a0:Math.min(s.x1,s.x2),a1:Math.max(s.x1,s.x2),len});
   });
   V.forEach(s=>{
+    const mx=(s.x1+s.x2)/2,my=(s.y1+s.y2)/2;
+    if(mx<mPt||my<mPt||mx>pgW-mPt||my>pgH-mPt)return;
     if(!isDark(s.c)||s.w<0.6)return;
     const len=Math.hypot(s.x2-s.x1,s.y2-s.y1)*mmPerPt;
     if(len<200)return;
@@ -502,6 +519,7 @@ async function runVecV2(out){
   const gapHist={};
   [...pH.gaps,...pV.gaps].forEach(g=>{const b=Math.floor(g/20)*20,k=b+'–'+(b+20);gapHist[k]=(gapHist[k]||0)+1;});
   window.lastVec={mmPerPt,segments:strokes.length,cuN,rects,fills,beds,dedup,asmCount:asm.length,pH,pV,planesH,planesV};
+  window.lastVecKey=fileName+'|'+document.getElementById('pageno').value;
   const topW=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([w,n])=>w+'pt×'+n).join(', ')||'—';
   let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V, '+cuN+' curve-out) · '+rects.length+' rects · '+fills.length+' fills<br>';
   h2+='<b>Wall planes</b>: H='+planesH.length+' V='+planesV.length+' (fill edges + ≥0.6pt dark strokes, 30mm merge)<br>';
@@ -540,12 +558,14 @@ function fitRoom(r){
       if(spanCtr<lo||spanCtr>hi)continue; // plane must span the seed (openings spanned via union)
       const d=before?(distCtr-pos):(pos-distCtr);
       if(d<0||d>4500*s)continue;
-      if(d<bd){bd=d;best=pos;}
+      if(d<bd){bd=d;best={pos,d};}
     }
     return best;
   };
-  const top=pick(LV.planesH,true,true),bot=pick(LV.planesH,true,false);
-  const lft=pick(LV.planesV,false,true),rgt=pick(LV.planesV,false,false);
+  const t=pick(LV.planesH,true,true),b=pick(LV.planesH,true,false);
+  const l=pick(LV.planesV,false,true),g=pick(LV.planesV,false,false);
+  r._fitD={top:t?Math.round(t.d/s):null,bot:b?Math.round(b.d/s):null,lft:l?Math.round(l.d/s):null,rgt:g?Math.round(g.d/s):null};
+  const top=t?t.pos:null,bot=b?b.pos:null,lft=l?l.pos:null,rgt=g?g.pos:null;
   let nx=r.x,ny=r.y,nw=r.wMm,nd=r.dMm,fitted=false;
   if(top!=null&&bot!=null&&(bot-top)>500*s){ny=(top+bot)/2;nd=(bot-top)/s;fitted=true;}
   if(lft!=null&&rgt!=null&&(rgt-lft)>500*s){nx=(lft+rgt)/2;nw=(rgt-lft)/s;fitted=true;}
@@ -564,9 +584,11 @@ function biggestIsMain(){
   const s=[...rooms].sort((a,b)=>b.wMm*b.dMm-a.wMm*a.dMm);
   s.forEach((r,i)=>r.type=i===0?'main':'other');
 }
-document.getElementById('autoBtn').onclick=()=>{
+document.getElementById('autoBtn').onclick=async()=>{
   if(!bg){alert('Load a PDF first');return;}
   if(!pxPerMm){alert('Scale not set — render PDF first (auto-scale reads the title block).');return;}
+  const key=fileName+'|'+document.getElementById('pageno').value;
+  if(!window.lastVec||window.lastVecKey!==key){await runVecV2(document.getElementById('vecOut'));}
   const wantBeds=+document.getElementById('bedcount').value||2;
   const W=bg.width,H=bg.height,s=pxPerMm;
   rooms=[];excls=[];sel=null;
@@ -596,7 +618,8 @@ document.getElementById('autoBtn').onclick=()=>{
   let fitMsg='';
   if(window.lastVec&&window.lastVec.planesH){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';}
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
-  document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN.</small>';
+  const det=rooms.map(r=>'<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):'')).join('');
+  document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN.'+det+'</small>';
   draw();renderList();
 };
 
