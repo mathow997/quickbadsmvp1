@@ -238,6 +238,11 @@ Entries stay chronological; the live question is always the last entry.
 - Meta: brace-check false alarm — a `don't` in a comment broke the naive quote-stripper.
   Avoid apostrophes in JS comments or the static check lies.
 
+## 2026-09-16 — v5.1: click-seed self-parse (built, pushed as 7d0dbe9)
+
+- seedBed ensures fresh geometry (re-parses when stale) and prints per-side fit distances —
+  no inspect-first trap. Clicked box without parse was raw seed; now impossible.
+
 ## 2026-09-16 — v5.2: clip fix + plane listing (built, pushed)
 
 - Overlay verdict: blue misses the bedroom walls entirely. Suspect: I cleared the current path
@@ -259,23 +264,13 @@ Entries stay chronological; the live question is always the last entry.
 - Purpose: one zoomed screenshot shows which bedroom walls parse as what — no more aggregate
   table guessing. Live: awaiting that screenshot.
 
-## 2026-09-16 — v6 raster verified on A01 (trial plans.pdf)
+## 2026-09-16 — v5.5: raster-or-vector test (built, pushed)
 
-- Plan-zone census proved it: 6 vector segments in the whole apartment zone — the plan base
-  is the raster image. Raster fit on click: 3006×3200, all edges on inner faces, COMPLIANT.
-- Seed position picks the winner on jogged sides (click right-of-ensuite → ensuite wall, not
-  living wall). Correct per first-wall rule; click placement or one drag resolves.
-- Open: FH-sheet vector path regression check; export check; robe auto-seed.
-
-## 2026-09-16 — v6: raster wall-band fallback behind toggle (built, pushed)
-
-- Wall evidence select: Vector planes (default — back anytime) vs Raster bands (fallback).
-  Dispatch in fitRoom; seeds, compliance, export untouched. Raster overlay tints the wall mask
-  green when active.
-- Raster fit: cached 0.25 wall mask (dark<120), 4 rays from seed, first dark run ≥50mm stops
-  (furniture hairlines are sub-pixel at this scale), caps mirror vector fit. Openings sail
-  through to the far wall — accepted, one edge to drag.
-- Architecture stays vector-first (plugin needs vectors); raster is fallback evidence only.
+- Zoomed overlay: bedroom walls carry NO overlay class at all — absent from parse, not misplaced.
+  Yet they render thick black. Remaining hypothesis: the plan base is a RASTER image
+  (1 paintImageXObject on sheet) with vector furniture/title over it.
+- Added rasterCheck: downsampled dark-pixel % per 3×3 cell. If top-right is dark in pixels but
+  empty in vectors, walls are raster and v6 goes hybrid (raster wall-maps + vector seeds/export).
 
 ## 2026-09-16 — v5.6: ExtGState line widths (built, pushed)
 
@@ -291,10 +286,33 @@ Entries stay chronological; the live question is always the last entry.
   legend/off-page content. Prints 2.4–6m enclosed rects — if the bedroom outline assembles,
   v6 seeds rooms from it instead of chasing beds.
 
-## 2026-09-16 — v5.5: raster-or-vector test (built, pushed)
+## 2026-09-16 — v6: raster wall-band fallback behind toggle (built, pushed)
 
-- Zoomed overlay: bedroom walls carry NO overlay class at all — absent from parse, not misplaced.
-  Yet they render thick black. Remaining hypothesis: the plan base is a RASTER image
-  (1 paintImageXObject on sheet) with vector furniture/title over it.
-- Added rasterCheck: downsampled dark-pixel % per 3×3 cell. If top-right is dark in pixels but
-  empty in vectors, walls are raster and v6 goes hybrid (raster wall-maps + vector seeds/export).
+- Wall evidence select: Vector planes (default — back anytime) vs Raster bands (fallback).
+  Dispatch in fitRoom; seeds, compliance, export untouched. Raster overlay tints the wall mask
+  green when active.
+- Raster fit: cached 0.25 wall mask (dark<120), 4 rays from seed, first dark run ≥50mm stops
+  (furniture hairlines are sub-pixel at this scale), caps mirror vector fit. Openings sail
+  through to the far wall — accepted, one edge to drag.
+- Architecture stays vector-first (plugin needs vectors); raster is fallback evidence only.
+
+## 2026-09-16 — v6 raster verified on A01 (trial plans.pdf)
+
+- Plan-zone census proved it: 6 vector segments in the whole apartment zone — the plan base
+  is the raster image. Raster fit on click: 3006×3200, all edges on inner faces, COMPLIANT.
+- Seed position picks the winner on jogged sides (click right-of-ensuite → ensuite wall, not
+  living wall). Correct per first-wall rule; click placement or one drag resolves.
+- Open: FH-sheet vector path regression check; export check; robe auto-seed.
+
+## 2026-09-16 — FH dump: whole parse translated off-page (evening finding, no fix yet)
+
+- FH-Design-C 7 dump: every fill at impossible coords (x to 251%, y −55 to −174%), 0 corners,
+  planes 0/0, plan-zone census 0/0/0 — yet walls render. Same class as A01 legend junk, but here
+  it is ALL the content. Working hypothesis: page CropBox offset (or equivalent) that the render
+  honors and the parser ignores. Started fix (capture page.view at render, subtract in P(),
+  print in dump) but STOPPED mid-way per user — reverted to keep tree clean.
+- MORNING PLAN: (1) re-apply crop-offset capture + P() subtract + dump print; (2) re-inspect FH —
+  if positions snap sane, vector path revives (queens/planes become real); if not, next hypothesis
+  is viewport rotation or XObject matrices; (3) confirm FH raster-fit outcome (box stayed raw seed
+  at click; autoMsg unknown — user ran Raster bands, fit result unconfirmed).
+- Status: tree clean. First action: the 3-line crop fix.
