@@ -177,6 +177,14 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
 - Meta: brace-check false alarm — a `don't` in a comment broke the naive quote-stripper.
   Avoid apostrophes in JS comments or the static check lies.
 
+## 2026-09-16 — v5.2: clip fix + plane listing (built, pushed)
+
+- Overlay verdict: blue misses the bedroom walls entirely. Suspect: I cleared the current path
+  on `clip`, but PDF clip does not consume the path — clipped-then-painted walls were dropped.
+  Fixed to keep accumulating (matches pdf.js SVG backend behavior).
+- Per-plane listing (offset mm from top/left, extent, support) added — next paste shows exactly
+  which planes exist and whether bedroom walls are among them.
+
 ## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
 
 - INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.

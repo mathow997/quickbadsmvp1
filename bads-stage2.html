@@ -386,7 +386,7 @@ async function runVecV2(out){
     }
     if(f===O.stroke||f===O.closeStroke){commit('stroke');continue;}
     if(f===O.fill||f===O.eoFill||f===O.fillStroke||f===O.eoFillStroke||f===O.closeFillStroke||f===O.closeEOFillStroke){commit('fill');continue;}
-    if(f===O.clip||f===O.eoClip||f===O.endPath){cur=[];continue;}
+    if(f===O.endPath){cur=[];continue;} // NOTE: clip does NOT consume the path (per spec) — keep accumulating
   }
   const isDark=c=>c&&Math.max(c[0],c[1],c[2])<=90;
   let H=[],V=[],cuN=0;
@@ -577,6 +577,8 @@ async function runVecV2(out){
   const topW=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([w,n])=>w+'pt×'+n).join(', ')||'—';
   let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V, '+cuN+' curve-out) · '+rects.length+' rects · '+cornerN+' corners · '+fills.length+' fills<br>';
   h2+='<b>Wall planes</b>: H='+planesH.length+' V='+planesV.length+' (fill edges + ≥0.6pt dark strokes, 10mm bins)<br>';
+  const pl=(p,horiz)=>Math.round((horiz?(pgH-p.c):p.c)*mmPerPt)+'mm @'+(horiz?Math.round(p.a0*mmPerPt)+'–'+Math.round(p.a1*mmPerPt):Math.round((pgH-p.a1)*mmPerPt)+'–'+Math.round((pgH-p.a0)*mmPerPt))+' sup'+Math.round(p.sup);
+  h2+='<small>H: '+planesH.map(p=>pl(p,true)).join(' · ')+'<br>V: '+planesV.map(p=>pl(p,false)).join(' · ')+'</small><br>';
   h2+='<b>Wall pairs</b> (dark, parallel, 60–350mm apart, &gt;50% overlap): H='+pH.pairs+' (of '+pH.n+' dark H) V='+pV.pairs+' (of '+pV.n+' dark V)<br>';
   h2+='<small>paired widths H: '+topW(pH.wHist)+' · V: '+topW(pV.wHist)+'</small><br>';
   const at=b=>'@'+Math.round((b.x0+b.x1)/2/pgW*100)+','+Math.round((1-(b.y0+b.y1)/2/pgH)*100)+'%';
