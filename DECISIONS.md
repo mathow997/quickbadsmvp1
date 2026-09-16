@@ -2,6 +2,25 @@
 
 Rule: append an entry whenever a new call is made or we change path — not once per session.
 Format: date · decision · why · what it kills/defers. Newest at the bottom.
+Entries stay chronological; the live question is always the last entry.
+
+## Session restart (read this first)
+
+- Workdir: `C:\Users\mhowa\Documents\IdeasGuy\badsdiagrams`; repo = `quickbadsmvp1/` subfolder,
+  pushed to `github.com/mathow997/quickbadsmvp1`, branch `main`. Root and repo copies of
+  `bads-stage2.html` + `DECISIONS.md` are kept IDENTICAL — edit the repo copy, Copy-Item to root,
+  commit, push. Never let them diverge.
+- `git` is NOT on PATH. Use the GitHub Desktop bundle:
+  `%LOCALAPPDATA%\GitHubDesktop\app-3.6.5\resources\app\git\cmd\git.exe` with `-C quickbadsmvp1`.
+- App: open `bads-stage2.html` from disk (file://), load PDFs via picker. No build step.
+- Key test files (workdir root): `trial plans.pdf` (Revit A01 1-bed, 1:20 — main sheet),
+  `FH-Design-C-NSG_DIP_Final 7.pdf` (1-bed presentation, 1:50),
+  `trial plans BADs.pdf` (reference exhibit of correct box placement),
+  `Apartment-Design-Guidelines-for-Victoria.pdf` (statutory source).
+- Verify before push: inline-script brace/paren balance (PowerShell counter) + every
+  getElementById target exists. NO apostrophes in JS comments — the counter treats `'` as a
+  string delimiter and lies (see v5 entry).
+- Current HEAD: `2ee6d6b` (v5.4). Live question: last entry below.
 
 ## Retro (reconstructed 2026-09-16 from prior sessions)
 
@@ -50,6 +69,22 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
   page size, title scale, BED/ROBE/WIR text hits, first 40 text items). Run it on `trial plans.pdf`
   and one FH solo next; thresholds for wall self-calibration come from real data, not guesses.
 
+## 2026-09-16 — inspector findings (v1 dumps)
+
+- `trial plans.pdf` (Revit A01, 1:20, A0): 1648 ops · strokes 594 / fills 49 · black-only
+  (white fills only) · widths 0.24–1.98pt (thin 0.24–0.43, mid 0.71–0.85, heavy 1.42–1.98) ·
+  53 texts, all title block, zero room labels. Walls are outline-stroke pairs; pen weight marks
+  cut-vs-projection, NOT wall thickness. Bed detection must be structural (no color separation).
+- `FH-Design-C-NSG_DIP_Final 7.pdf` (1-bed presentation, 1:50, A1): 13143 ops · strokes 3722 /
+  eoFill 280 · grey palette (grey strokes 85/102/128/179/192, dark fills 25/35/black, white 51) ·
+  widths 0.3–4.2pt · 35 texts (title + disclaimer, letter-spaced extraction), no room labels.
+  eoFill runs are likely robe/wall hatching — need fill bounding boxes to confirm.
+- Consequence: color is a hint on FH but absent on Revit, so the adapter cannot depend on it.
+  (Refinement: Revit CAN emit colour — these two sheets just don't. Colour stays demotion-only
+  hint, never a primary signal, since its meaning varies per practice.)
+  Width counts are `setLineWidth` calls, not strokes — v2 must attribute strokes per width.
+  Geometry (segments, pairs, rects, fill boxes) is required next; counts alone can't place boxes.
+
 ## 2026-09-16 — inspector v2 (geometry) — pushed as aa17f92 follow-up
 
 - Parses `constructPath(ops, coords)` per pdf.js 3.11.174 svg.js (verified against source):
@@ -70,6 +105,19 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
 - Bed rects = 0 of 49 rects. Beds are not closed axis-aligned rects in this sheet (rounded
   bedding / unclosed segment groups suspected). Fix v3: print full rect-dim histogram,
   add unclosed 4-segment rect assembly + arc/circle detection before auto-seed.
+
+## 2026-09-16 — FH C-solo v2 dump
+
+- 6763 segs (922 H / 2570 V — V-heavy: balcony decking, per later screenshot).
+- Bed rects = 3: 2× 1530×2040 sup8 (queens, exact) + 1× 1266×2112 sup0 — in a 1-bed Type 1A.
+  Queens are double-drawn (plan + bedding overlap, per screenshot); dedupe by overlap needed.
+- Same hairline over-pairing (0.3pt dominates; 2.1/4.2pt never pair) — so width-gating to heavy
+  is WRONG for FH. Fix v3: gap histogram (20mm bins) per direction; wall thicknesses = peaks
+  (expect 90/190/270), furniture scatter = background. Width stays out of the decision.
+- Colour bug: this sheet emits 0–255 range color args, v2 normC assumed 0–1 (hence 65025 fills).
+  Fix v3: values >1 pass through unscaled. Dark detection itself was unaffected (black is 0 either way).
+- Top fills are all white/grey room backgrounds; dark fills (25/25/25 etc.) need their own
+  listing — v3 prints dark fills separately as wall-poche / robe-hatch candidates.
 
 ## 2026-09-16 — v3: assembly, dedupe, gap histogram, auto-seed (built, pushed)
 
@@ -107,6 +155,18 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
   demonstrably corrupts a fit). 1000×2000 sup0 correctly excluded (wardrobe/desk).
 - v4 = wall-fit: grow seeded boxes to nearest enclosing dark lines/fills, cap 6000mm/side,
   keep seeded size when no wall in range (open-plan side). Robe auto-seed deferred.
+
+## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
+
+- INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.
+  Never pair-midline, never outer face.
+- Door openings: wall is interrupted but the box follows the WALL PLANE across the gap —
+  so fit to colinear planes with union extents, not nearest segments.
+  Door-swing arcs explicitly ignored: tag curve-derived segments, exclude from planes.
+- Robe fronts non-critical: near-flush acceptable, minimums met is what counts. No robe
+  auto-precision work; fraction defaults + drag stand.
+- Wall evidence priority: dark fill edges (unambiguous poche) first, then dark strokes
+  ≥0.6pt (excludes 0.24–0.43 furniture hairlines; FH thin outlines covered via its fills).
 
 ## 2026-09-16 — v4 built (planes + fit, pushed)
 
@@ -185,43 +245,15 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
 - Per-plane listing (offset mm from top/left, extent, support) added — next paste shows exactly
   which planes exist and whether bedroom walls are among them.
 
-## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
+## 2026-09-16 — v5.3: wall-evidence map (built, pushed as ca5a442)
 
-- INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.
-  Never pair-midline, never outer face. (Implementation already does this; now a logged rule.)
-- Door openings: wall is interrupted but the box follows the WALL PLANE across the gap —
-  so fit to colinear-merged planes (30mm merge, union extents), not nearest segments.
-  Door-swing arcs explicitly ignored: tag curve-derived segments, exclude from planes.
-- Robe fronts non-critical: near-flush acceptable, minimums met is what counts. No robe
-  auto-precision work; fraction defaults + drag stand.
-- Wall evidence priority: dark fill edges (unambiguous poche) first, then dark strokes
-  ≥0.6pt (excludes 0.24–0.43 furniture hairlines; FH thin outlines covered via its fills).
+- Added dark-fills-with-positions (top 20) + heavy-stroke metres per 3×3 cell.
+- Finding: ALL dark fills sit bottom-left/off-page; heavy strokes avoid the top row and right
+  column entirely — yet the bedroom walls render thick black. Open question (live): what draws
+  the bedroom walls with no dark fill and no heavy stroke? v5.4 overlay answers by class.
 
-## 2026-09-16 — FH C-solo v2 dump
+## 2026-09-16 — v5.4: evidence-class overlay (built, pushed as 2ee6d6b)
 
-- 6763 segs (922 H / 2570 V — V-heavy, cause unknown: mullions? battens?).
-- Bed rects = 3: 2× 1530×2040 sup8 (queens, exact) + 1× 1266×2112 sup0 — in a 1-bed Type 1A.
-  Queens may be double-drawn (plan + detail overlap); dedupe by overlap needed before auto-seed.
-- Same hairline over-pairing (0.3pt dominates; 2.1/4.2pt never pair) — so width-gating to heavy
-  is WRONG for FH. Fix v3: gap histogram (20mm bins) per direction; wall thicknesses = peaks
-  (expect 90/190/270), furniture scatter = background. Width stays out of the decision.
-- Colour bug: this sheet emits 0–255 range color args, v2 normC assumed 0–1 (hence 65025 fills).
-  Fix v3: values >1 pass through unscaled. Dark detection itself was unaffected (black is 0 either way).
-- Top fills are all white/grey room backgrounds; dark fills (25/25/25 etc.) need their own
-  listing — v3 prints dark fills separately as wall-poche / robe-hatch candidates.
-
-## 2026-09-16 — inspector findings (v1 dumps)
-
-- `trial plans.pdf` (Revit A01, 1:20, A0): 1648 ops · strokes 594 / fills 49 · black-only
-  (white fills only) · widths 0.24–1.98pt (thin 0.24–0.43, mid 0.71–0.85, heavy 1.42–1.98) ·
-  53 texts, all title block, zero room labels. Walls are outline-stroke pairs; pen weight marks
-  cut-vs-projection, NOT wall thickness. Bed detection must be structural (no color separation).
-- `FH-Design-C-NSG_DIP_Final 7.pdf` (1-bed presentation, 1:50, A1): 13143 ops · strokes 3722 /
-  eoFill 280 · grey palette (grey strokes 85/102/128/179/192, dark fills 25/35/black, white 51) ·
-  widths 0.3–4.2pt · 35 texts (title + disclaimer, letter-spaced extraction), no room labels.
-  eoFill runs are likely robe/wall hatching — need fill bounding boxes to confirm.
-- Consequence: color is a hint on FH but absent on Revit, so the adapter cannot depend on it.
-  (Refinement: Revit CAN emit colour — these two sheets just don't. Colour stays demotion-only
-  hint, never a primary signal, since its meaning varies per practice.)
-  Width counts are `setLineWidth` calls, not strokes — v2 must attribute strokes per width.
-  Geometry (segments, pairs, rects, fill boxes) is required next; counts alone can't place boxes.
+- Overlay draws fills red, heavy dark strokes orange, planes blue, beds green, bed-band yellow.
+- Purpose: one zoomed screenshot shows which bedroom walls parse as what — no more aggregate
+  table guessing. Live: awaiting that screenshot.
