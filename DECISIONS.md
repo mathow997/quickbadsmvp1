@@ -49,3 +49,29 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
 - Added vector inspector (`getOperatorList` dump: path-op counts, line-width + color histograms,
   page size, title scale, BED/ROBE/WIR text hits, first 40 text items). Run it on `trial plans.pdf`
   and one FH solo next; thresholds for wall self-calibration come from real data, not guesses.
+
+## 2026-09-16 — inspector v2 (geometry) — pushed as aa17f92 follow-up
+
+- Parses `constructPath(ops, coords)` per pdf.js 3.11.174 svg.js (verified against source):
+  tracks save/restore/transform/form-XObject CTM, line width, stroke/fill colour; commits paths
+  on stroke/fill/clip/endPath. Outputs: H/V segment split, dark parallel-pair search (60–350mm,
+  >50% overlap), closed-4-corner + `rectangle` rect capture with real dims, bed match
+  (800–1950 × 1750–2150mm) with bedside-square support count (<800mm), top fills by area.
+- Parsed geometry stashed on `window.lastVec` — next step (auto-seed bedrooms from bed rects)
+  builds on it, no re-parse.
+
+## 2026-09-16 — inspector findings (v1 dumps)
+
+- `trial plans.pdf` (Revit A01, 1:20, A0): 1648 ops · strokes 594 / fills 49 · black-only
+  (white fills only) · widths 0.24–1.98pt (thin 0.24–0.43, mid 0.71–0.85, heavy 1.42–1.98) ·
+  53 texts, all title block, zero room labels. Walls are outline-stroke pairs; pen weight marks
+  cut-vs-projection, NOT wall thickness. Bed detection must be structural (no color separation).
+- `FH-Design-C-NSG_DIP_Final 7.pdf` (1-bed presentation, 1:50, A1): 13143 ops · strokes 3722 /
+  eoFill 280 · grey palette (grey strokes 85/102/128/179/192, dark fills 25/35/black, white 51) ·
+  widths 0.3–4.2pt · 35 texts (title + disclaimer, letter-spaced extraction), no room labels.
+  eoFill runs are likely robe/wall hatching — need fill bounding boxes to confirm.
+- Consequence: color is a hint on FH but absent on Revit, so the adapter cannot depend on it.
+  (Refinement: Revit CAN emit colour — these two sheets just don't. Colour stays demotion-only
+  hint, never a primary signal, since its meaning varies per practice.)
+  Width counts are `setLineWidth` calls, not strokes — v2 must attribute strokes per width.
+  Geometry (segments, pairs, rects, fill boxes) is required next; counts alone can't place boxes.
