@@ -257,3 +257,11 @@ Entries stay chronological; the live question is always the last entry.
 - Overlay draws fills red, heavy dark strokes orange, planes blue, beds green, bed-band yellow.
 - Purpose: one zoomed screenshot shows which bedroom walls parse as what — no more aggregate
   table guessing. Live: awaiting that screenshot.
+
+## 2026-09-16 — v5.5: raster-or-vector test (built, pushed)
+
+- Zoomed overlay: bedroom walls carry NO overlay class at all — absent from parse, not misplaced.
+  Yet they render thick black. Remaining hypothesis: the plan base is a RASTER image
+  (1 paintImageXObject on sheet) with vector furniture/title over it.
+- Added rasterCheck: downsampled dark-pixel % per 3×3 cell. If top-right is dark in pixels but
+  empty in vectors, walls are raster and v6 goes hybrid (raster wall-maps + vector seeds/export).

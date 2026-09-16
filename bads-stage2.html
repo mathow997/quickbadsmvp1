@@ -607,6 +607,27 @@ async function runVecV2(out){
   });
   h2+='</table>';
   out.innerHTML+=h2;
+  if(bg)await rasterCheck(out);
+}
+// ---------- v5.5: raster check — are the walls pixels, not vectors? ----------
+async function rasterCheck(out){
+  try{
+    const sc=0.25,ow=Math.max(1,Math.round(bg.width*sc)),oh=Math.max(1,Math.round(bg.height*sc));
+    const off=document.createElement('canvas');off.width=ow;off.height=oh;
+    const c=off.getContext('2d',{willReadFrequently:true});
+    c.drawImage(bg,0,0,ow,oh);
+    const d=c.getImageData(0,0,ow,oh).data;
+    const grid=[0,0,0,0,0,0,0,0,0],tot=[0,0,0,0,0,0,0,0,0];
+    for(let y=0;y<oh;y++)for(let x=0;x<ow;x++){
+      const i=(y*ow+x)*4,gx=Math.min(2,Math.floor(x/ow*3)),gy=Math.min(2,Math.floor(y/oh*3));
+      tot[gy*3+gx]++;
+      if(d[i]<110&&d[i+1]<110&&d[i+2]<110)grid[gy*3+gx]++;
+    }
+    let h='<b>Raster dark-pixel % per 3x3 (walls-as-pixels test)</b><table><tr><th></th><th>left</th><th>ctr</th><th>right</th></tr>';
+    ['top','mid','bot'].forEach((r,gy)=>{h+='<tr><td>'+r+'</td>'+[0,1,2].map(gx=>'<td>'+(100*grid[gy*3+gx]/tot[gy*3+gx]).toFixed(1)+'</td>').join('')+'</tr>';});
+    h+='</table>';
+    out.innerHTML+=h;
+  }catch(err){out.innerHTML+='<small>Raster check failed: '+err.message+'</small>';}
 }
 
 // ---------- v4.5: detection overlay (beds green, bed-band yellow, planes blue) ----------
