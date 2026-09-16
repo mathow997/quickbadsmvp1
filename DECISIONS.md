@@ -21,6 +21,7 @@ Entries stay chronological; the live question is always the last entry.
   getElementById target exists. NO apostrophes in JS comments — the counter treats `'` as a
   string delimiter and lies (see v5 entry).
 - Current HEAD: `2ee6d6b` (v5.4). Live question: last entry below.
+- (HEAD moves fast — `git log --oneline -3` is truth; this line updated when remembered.)
 
 ## Retro (reconstructed 2026-09-16 from prior sessions)
 
@@ -254,9 +255,19 @@ Entries stay chronological; the live question is always the last entry.
 
 ## 2026-09-16 — v5.4: evidence-class overlay (built, pushed as 2ee6d6b)
 
-- Overlay draws fills red, heavy dark strokes orange, planes blue, beds green, bed-band yellow.
+- Overlay draws fills red, heavy strokes orange, planes blue, beds green, bed-band yellow.
 - Purpose: one zoomed screenshot shows which bedroom walls parse as what — no more aggregate
   table guessing. Live: awaiting that screenshot.
+
+## 2026-09-16 — v6: raster wall-band fallback behind toggle (built, pushed)
+
+- Wall evidence select: Vector planes (default — back anytime) vs Raster bands (fallback).
+  Dispatch in fitRoom; seeds, compliance, export untouched. Raster overlay tints the wall mask
+  green when active.
+- Raster fit: cached 0.25 wall mask (dark<120), 4 rays from seed, first dark run ≥50mm stops
+  (furniture hairlines are sub-pixel at this scale), caps mirror vector fit. Openings sail
+  through to the far wall — accepted, one edge to drag.
+- Architecture stays vector-first (plugin needs vectors); raster is fallback evidence only.
 
 ## 2026-09-16 — v5.6: ExtGState line widths (built, pushed)
 

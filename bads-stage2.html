@@ -42,6 +42,8 @@
   <hr>
   <label>Bedrooms in this apartment</label>
   <select id="bedcount"><option value="1">1 bed</option><option value="2" selected>2 bed</option><option value="3">3 bed</option></select>
+  <label>Wall evidence (vector default — switch back anytime)</label>
+  <select id="wallsrc"><option value="vec">Vector planes</option><option value="ras">Raster bands (fallback)</option></select>
   <button id="autoBtn" style="font-weight:700;background:#e8f5e9;border:2px solid #00c853;padding:10px">⚡ AUTO-MEASURE BEDROOMS</button>
   <small>Auto-places Main + Other + robe exclusions. Then drag edges to snap to wall inner faces.</small>
   <div class="row">
@@ -589,6 +591,16 @@ async function runVecV2(out){
   h2+='<b>Biggest dedup rects</b>: '+dedup.slice(0,12).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?'o':'c')+' sup'+b.support+(enclosed(b)?'':' NOENCL')+at(b)).join(' · ')+'<br>';
   const roomBand=dedup.filter(r=>{const s=Math.min(r.w,r.h),l=Math.max(r.w,r.h);return s>=2400&&s<=5000&&l>=2400&&l<=6000;});
   h2+='<b>Room band</b> (2.4–6m sides): '+roomBand.slice(0,12).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?'o':'c')+' sup'+b.support+(enclosed(b)?'':' NOENCL')+at(b)).join(' · ')+'<br>';
+  const zc={H:{n:0,len:0,w:{}},V:{n:0,len:0,w:{}},D:{n:0,len:0,w:{}}};
+  strokes.forEach(s=>{
+    const mx=(s.x1+s.x2)/2/pgW,my=1-(s.y1+s.y2)/2/pgH;
+    if(mx<0.30||mx>0.80||my<0.15||my>0.75)return; // plan zone (excl. title block + legend)
+    const dx=s.x2-s.x1,dy=s.y2-s.y1,len=Math.hypot(dx,dy)*mmPerPt;
+    const k=Math.abs(dy)<0.05*Math.hypot(dx,dy)+0.3?'H':(Math.abs(dx)<0.05*Math.hypot(dx,dy)+0.3?'V':'D');
+    zc[k].n++;zc[k].len+=len;const wk=String(s.w);zc[k].w[wk]=(zc[k].w[wk]||0)+1;
+  });
+  const zw=o=>Object.entries(o.w).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([w,n])=>w+'×'+n).join(',');
+  h2+='<b>Plan-zone census</b> H:'+zc.H.n+'/'+(zc.H.len/1000).toFixed(0)+'m['+zw(zc.H)+'] V:'+zc.V.n+'/'+(zc.V.len/1000).toFixed(0)+'m['+zw(zc.V)+'] D:'+zc.D.n+'/'+(zc.D.len/1000).toFixed(0)+'m['+zw(zc.D)+']<br>';
   h2+='<b>Pair-gap histogram</b> (20mm bins): '+Object.entries(gapHist).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,n])=>k+'mm×'+n).join(', ')+'<br>';
   h2+='<b>Dark fills with pos (top 20)</b><table><tr><th>color</th><th>W×H mm</th><th>@x,y%</th></tr>';
   fills.map(f=>({f,a:(f.x1-f.x0)*(f.y1-f.y0)})).sort((a,b)=>b.a-a.a).filter(({f})=>isDark(f.c)).slice(0,20).forEach(({f})=>{
@@ -641,6 +653,7 @@ function drawVec(){
   const ptW=bg.width/RENDER,ptH=bg.height/RENDER;
   const IX=pt=>view.ox+pt/ptW*bg.width*view.s, IY=pt=>view.oy+(ptH-pt)/ptH*bg.height*view.s;
   ctx.save();ctx.lineWidth=2;
+  if(window._wm&&(document.getElementById('wallsrc')||{value:''}).value==='ras'){ctx.save();ctx.globalAlpha=0.30;ctx.drawImage(window._wm.gv,view.ox,view.oy,bg.width*view.s,bg.height*view.s);ctx.restore();}
   (LV.fills||[]).forEach(f=>{const dark=f.c&&Math.max(f.c[0],f.c[1],f.c[2])<=90;ctx.strokeStyle=dark?'rgba(255,0,0,0.75)':'rgba(255,150,150,0.5)';ctx.strokeRect(IX(f.x0),IY(f.y1),IX(f.x1)-IX(f.x0),IY(f.y0)-IY(f.y1));});
   (LV.strokes||[]).forEach(s=>{if(s.cu||!s.c||Math.max(s.c[0],s.c[1],s.c[2])>90||s.w<0.6)return;ctx.strokeStyle='rgba(255,140,0,0.8)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(IX(s.x1),IY(s.y1));ctx.lineTo(IX(s.x2),IY(s.y2));ctx.stroke();ctx.lineWidth=2;});
   (LV.planesH||[]).forEach(p=>{if(p.sup<1000)return;ctx.strokeStyle='rgba(25,118,210,0.85)';ctx.beginPath();ctx.moveTo(IX(p.a0),IY(p.c));ctx.lineTo(IX(p.a1),IY(p.c));ctx.stroke();});
@@ -653,6 +666,11 @@ function drawVec(){
 }
 // ---------- v4: wall-fit — grow boxes to nearest inner-face planes ----------
 function fitRoom(r){
+  const src=(document.getElementById('wallsrc')||{value:'vec'}).value||'vec';
+  if(src==='ras')return fitRaster(r);
+  return fitVec(r);
+}
+function fitVec(r){
   const LV=window.lastVec;
   if(!LV||!LV.planesH||!pxPerMm||!bg)return false;
   const W=bg.width,H=bg.height,s=pxPerMm,ptW=W/RENDER,ptH=H/RENDER;
@@ -684,6 +702,48 @@ function fitRoom(r){
   let nx=r.x,ny=r.y,nw=r.wMm,nd=r.dMm,fitted=false;
   if(top!=null&&bot!=null&&(bot-top)>500*s){ny=(top+bot)/2;nd=(bot-top)/s;fitted=true;}
   if(lft!=null&&rgt!=null&&(rgt-lft)>500*s){nx=(lft+rgt)/2;nw=(rgt-lft)/s;fitted=true;}
+  if(!fitted)return false;
+  if(nw>6000||nd>6000)return false;
+  r.x=nx;r.y=ny;r.wMm=Math.round(nw);r.dMm=Math.round(nd);
+  return true;
+}
+// ---------- v6: raster wall bands (fallback when vector planes are absent) ----------
+function wallMask(){
+  const key=fileName+'|'+document.getElementById('pageno').value;
+  if(window._wm&&window._wmkey===key)return window._wm;
+  const k=0.25,ow=Math.max(1,Math.round(bg.width*k)),oh=Math.max(1,Math.round(bg.height*k));
+  const off=document.createElement('canvas');off.width=ow;off.height=oh;
+  const c=off.getContext('2d',{willReadFrequently:true});
+  c.drawImage(bg,0,0,ow,oh);
+  const d=c.getImageData(0,0,ow,oh).data,m=new Uint8Array(ow*oh);
+  for(let i=0;i<ow*oh;i++){const j=i*4;if(d[j]<120&&d[j+1]<120&&d[j+2]<120)m[i]=1;}
+  const gv=document.createElement('canvas');gv.width=ow;gv.height=oh;
+  const gc=gv.getContext('2d'),gi=gc.createImageData(ow,oh);
+  for(let i=0;i<ow*oh;i++){if(m[i]){gi.data[i*4+1]=200;gi.data[i*4+3]=255;}}
+  gc.putImageData(gi,0,0);
+  window._wm={m,ow,oh,k,gv};window._wmkey=key;
+  return window._wm;
+}
+function fitRaster(r){
+  if(!bg||!pxPerMm)return false;
+  const WM=wallMask(),s=pxPerMm*WM.k,px=pxPerMm;
+  const runMin=Math.max(3,Math.round(50*s)),maxR=Math.round(4500*s);
+  const cx=Math.round(r.x*WM.k),cy=Math.round(r.y*WM.k);
+  const ray=(dx,dy)=>{
+    let run=0;
+    for(let i=1;i<=maxR;i++){
+      const x=cx+dx*i,y=cy+dy*i;
+      if(x<0||y<0||x>=WM.ow||y>=WM.oh)return null;
+      if(WM.m[y*WM.ow+x]){run++;if(run>=runMin){const i0=i-run+1;return{pos:dx?(cx+dx*i0)/WM.k:(cy+dy*i0)/WM.k,d:i0/s};}}
+      else run=0;
+    }
+    return null;
+  };
+  const t=ray(0,-1),b=ray(0,1),l=ray(-1,0),g=ray(1,0);
+  r._fitD={top:t?Math.round(t.d):null,bot:b?Math.round(b.d):null,lft:l?Math.round(l.d):null,rgt:g?Math.round(g.d):null};
+  let nx=r.x,ny=r.y,nw=r.wMm,nd=r.dMm,fitted=false;
+  if(t&&b&&(b.pos-t.pos)>500*px){ny=(t.pos+b.pos)/2;nd=(b.pos-t.pos)/px;fitted=true;}
+  if(l&&g&&(g.pos-l.pos)>500*px){nx=(l.pos+g.pos)/2;nw=(g.pos-l.pos)/px;fitted=true;}
   if(!fitted)return false;
   if(nw>6000||nd>6000)return false;
   r.x=nx;r.y=ny;r.wMm=Math.round(nw);r.dMm=Math.round(nd);
