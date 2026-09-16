@@ -259,6 +259,14 @@ Entries stay chronological; the live question is always the last entry.
 - Purpose: one zoomed screenshot shows which bedroom walls parse as what — no more aggregate
   table guessing. Live: awaiting that screenshot.
 
+## 2026-09-16 — v6 raster verified on A01 (trial plans.pdf)
+
+- Plan-zone census proved it: 6 vector segments in the whole apartment zone — the plan base
+  is the raster image. Raster fit on click: 3006×3200, all edges on inner faces, COMPLIANT.
+- Seed position picks the winner on jogged sides (click right-of-ensuite → ensuite wall, not
+  living wall). Correct per first-wall rule; click placement or one drag resolves.
+- Open: FH-sheet vector path regression check; export check; robe auto-seed.
+
 ## 2026-09-16 — v6: raster wall-band fallback behind toggle (built, pushed)
 
 - Wall evidence select: Vector planes (default — back anytime) vs Raster bands (fallback).
