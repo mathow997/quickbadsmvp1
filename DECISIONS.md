@@ -60,6 +60,44 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
 - Parsed geometry stashed on `window.lastVec` — next step (auto-seed bedrooms from bed rects)
   builds on it, no re-parse.
 
+## 2026-09-16 — trial A01 v2 dump (unpushed; ships with v3)
+
+- 1484 segs (335 H / 390 V, ~759 angled — likely door-swing arcs, future entry-door signal).
+- Wall pairs over-fire: H=726/V=866, dominated by 0.24pt hairlines (842/1398 incidences) vs
+  1.98pt (221/144). Fix: width-gate pairing to mid+heavy bands; hairlines excluded.
+- Black solid fills ARE walls here too: 200×6400, 200×6200, 6600×200 etc. — Revit mixes
+  outline pairs and 100–200mm solid poche. Fix: treat dark fills 100–300mm thick as walls directly.
+- Bed rects = 0 of 49 rects. Beds are not closed axis-aligned rects in this sheet (rounded
+  bedding / unclosed segment groups suspected). Fix v3: print full rect-dim histogram,
+  add unclosed 4-segment rect assembly + arc/circle detection before auto-seed.
+
+## 2026-09-16 — v3: assembly, dedupe, gap histogram, auto-seed (built, pushed)
+
+- Unclosed-rect assembly: H endpoints × V endpoints within ~2mm real form corners; 4-corner
+  cycles sharing segments become rects (`open:true`). Guarded: skipped past 60M endpoint pairs.
+- Dedupe: same dims (±5%/60mm) + >50% overlap = one rect. Beds additionally require support≥2
+  (squares 280–650mm within 800mm) — kills double-drawn queens and dining tables per screenshots.
+- Gap histogram (20mm bins, H+V pooled) replaces width-gating; peaks = wall thicknesses.
+- Dark fills listed separately (poche / robe-hatch candidates); normC passes through >1 values.
+- Auto-seed: beds found → boxes centered on up to 3 biggest (size = bed+800mm, ≥ minimums);
+  none found → page-fraction fallback. Robes stay fraction-placed (dark-fill seeding is v4).
+- Screenshots confirmed: FH has exactly 1 bed (double-draw proved); A01 bed is unclosed
+  segments (assembly proved necessary); entry door swing visible (future unit signal);
+  balcony decking explains FH V-heavy segments.
+
+## 2026-09-16 — FH C-solo v2 dump
+
+- 6763 segs (922 H / 2570 V — V-heavy, cause unknown: mullions? battens?).
+- Bed rects = 3: 2× 1530×2040 sup8 (queens, exact) + 1× 1266×2112 sup0 — in a 1-bed Type 1A.
+  Queens may be double-drawn (plan + detail overlap); dedupe by overlap needed before auto-seed.
+- Same hairline over-pairing (0.3pt dominates; 2.1/4.2pt never pair) — so width-gating to heavy
+  is WRONG for FH. Fix v3: gap histogram (20mm bins) per direction; wall thicknesses = peaks
+  (expect 90/190/270), furniture scatter = background. Width stays out of the decision.
+- Colour bug: this sheet emits 0–255 range color args, v2 normC assumed 0–1 (hence 65025 fills).
+  Fix v3: values >1 pass through unscaled. Dark detection itself was unaffected (black is 0 either way).
+- Top fills are all white/grey room backgrounds; dark fills (25/25/25 etc.) need their own
+  listing — v3 prints dark fills separately as wall-poche / robe-hatch candidates.
+
 ## 2026-09-16 — inspector findings (v1 dumps)
 
 - `trial plans.pdf` (Revit A01, 1:20, A0): 1648 ops · strokes 594 / fills 49 · black-only

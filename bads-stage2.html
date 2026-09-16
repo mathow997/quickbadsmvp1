@@ -317,7 +317,7 @@ async function runVecV2(out){
     setStrokeColor:oid('setStrokeColor'),setFillColor:oid('setFillColor'),setStrokeGray:oid('setStrokeGray'),
     setFillGray:oid('setFillGray'),formBegin:oid('paintFormXObjectBegin'),formEnd:oid('paintFormXObjectEnd')};
   const mmPerPt=25.4/72*autoDenom;
-  const normC=a=>{if(!a||!a.length)return null;if(a.length===1){const g=Math.round(a[0]*255);return[g,g,g];}return[Math.round(a[0]*255),Math.round(a[1]*255),Math.round(a[2]*255)];};
+  const normC=a=>{if(!a||!a.length)return null;const v=x=>x>1?Math.round(x):Math.round(x*255);if(a.length===1){const g=v(a[0]);return[g,g,g];}return[v(a[0]),v(a[1]),v(a[2])];};
   const mult=(m,t)=>[m[0]*t[0]+m[1]*t[2],m[0]*t[1]+m[1]*t[3],m[2]*t[0]+m[3]*t[2],m[2]*t[1]+m[3]*t[3],m[4]*t[0]+m[5]*t[2]+t[4],m[4]*t[1]+m[5]*t[3]+t[5]];
   const P0=(m,x,y)=>[m[0]*x+m[2]*y+m[4],m[1]*x+m[3]*y+m[5]];
   let ctm=[1,0,0,1,0,0],lw=1,sc=null,fc=null;const stack=[];
@@ -382,7 +382,7 @@ async function runVecV2(out){
     const arr=list.filter(s=>isDark(s.c));
     const key=s=>horiz?(s.y1+s.y2)/2:(s.x1+s.x2)/2;
     arr.sort((a,b)=>key(a)-key(b));
-    let pairs=0;const wHist={};
+    let pairs=0;const wHist={},gaps=[];
     for(let i=0;i<arr.length;i++){
       const a=arr[i],am=key(a);
       const a0=horiz?Math.min(a.x1,a.x2):Math.min(a.y1,a.y2),a1=horiz?Math.max(a.x1,a.x2):Math.max(a.y1,a.y2);
@@ -392,26 +392,91 @@ async function runVecV2(out){
         if(gap<60)continue;
         const b0=horiz?Math.min(b.x1,b.x2):Math.min(b.y1,b.y2),b1=horiz?Math.max(b.x1,b.x2):Math.max(b.y1,b.y2);
         const ov=Math.min(a1,b1)-Math.max(a0,b0),sh=Math.min(a1-a0,b1-b0);
-        if(sh>0&&ov>0.5*sh){pairs++;wHist[a.w]=(wHist[a.w]||0)+1;wHist[b.w]=(wHist[b.w]||0)+1;}
+        if(sh>0&&ov>0.5*sh){pairs++;gaps.push(gap);wHist[a.w]=(wHist[a.w]||0)+1;wHist[b.w]=(wHist[b.w]||0)+1;}
       }
     }
-    return{pairs,wHist,n:arr.length};
+    return{pairs,wHist,n:arr.length,gaps};
   };
   const pH=pairSearch(H,true),pV=pairSearch(V,false);
-  const beds=rects.filter(r=>{const s=Math.min(r.w,r.h),l=Math.max(r.w,r.h);return s>=800&&s<=1950&&l>=1750&&l<=2150;});
-  const squares=rects.filter(r=>{const s=Math.min(r.w,r.h),l=Math.max(r.w,r.h);return s>=280&&s<=650&&l>=280&&l<=650;});
-  beds.forEach(b=>{
+  // ----- v3: unclosed-rect assembly (2H+2V segs, endpoints within ~2mm) -----
+  const tol=2/mmPerPt;
+  const asm=[];
+  if(H.length*V.length<60000000){
+    const vEnds=[];V.forEach((s,vi)=>{vEnds.push({x:s.x1,y:s.y1,vi});vEnds.push({x:s.x2,y:s.y2,vi});});
+    const cornerMap=new Map(),hCorners=new Map(),vCorners=new Map();
+    const reg=(mp,k,c)=>{if(!mp.has(k))mp.set(k,[]);mp.get(k).push(c);};
+    H.forEach((s,hi)=>{
+      [[s.x1,s.y1],[s.x2,s.y2]].forEach(([ex,ey])=>{
+        for(const ve of vEnds){
+          if(Math.abs(ve.x-ex)<tol&&Math.abs(ve.y-ey)<tol){
+            const cx=(ex+ve.x)/2,cy=(ey+ve.y)/2,k=Math.round(cx/tol)+':'+Math.round(cy/tol);
+            let c=cornerMap.get(k);
+            if(!c){c={x:cx,y:cy,hs:new Set(),vs:new Set()};cornerMap.set(k,c);}
+            if(!c.hs.has(hi)){c.hs.add(hi);reg(hCorners,hi,c);}
+            if(!c.vs.has(ve.vi)){c.vs.add(ve.vi);reg(vCorners,ve.vi,c);}
+          }
+        }
+      });
+    });
+    const asmSeen=new Set();
+    for(const c of cornerMap.values()){
+      for(const hi of c.hs){const hc=hCorners.get(hi)||[];
+        for(const c2 of hc){if(c2===c)continue;
+          for(const vi of c.vs){const vc=vCorners.get(vi)||[];
+            for(const c3 of vc){if(c3===c)continue;
+              const c4=cornerMap.get(Math.round(c2.x/tol)+':'+Math.round(c3.y/tol));
+              if(!c4)continue;
+              if(![...c4.hs].some(h=>c3.hs.has(h)))continue;
+              if(![...c4.vs].some(v=>c2.vs.has(v)))continue;
+              const x0=Math.min(c.x,c2.x),x1=Math.max(c.x,c2.x),y0=Math.min(c.y,c3.y),y1=Math.max(c.y,c3.y);
+              const key=[x0,y0,x1,y1].map(v=>v.toFixed(1)).join(',');
+              if(asmSeen.has(key))continue;asmSeen.add(key);
+              if(x1-x0<0.5||y1-y0<0.5)continue;
+              asm.push({x0,y0,x1,y1,w:(x1-x0)*mmPerPt,h:(y1-y0)*mmPerPt,open:true});
+            }
+          }
+        }
+      }
+    }
+  }
+  // ----- v3: dedupe (overlap + same dims = one; kills double-drawn beds) -----
+  const allR=[...rects.map(r=>({...r,open:false})),...asm];
+  allR.sort((a,b)=>(b.w*b.h)-(a.w*a.h));
+  const dedup=[];
+  for(const r of allR){
+    const dup=dedup.some(k=>{
+      if(Math.abs(k.w-r.w)>Math.max(60,k.w*0.05)||Math.abs(k.h-r.h)>Math.max(60,k.h*0.05))return false;
+      const ox=Math.min(k.x1,r.x1)-Math.max(k.x0,r.x0),oy=Math.min(k.y1,r.y1)-Math.max(k.y0,r.y0);
+      if(ox<=0||oy<=0)return false;
+      return (ox*oy)/Math.min((k.x1-k.x0)*(k.y1-k.y0),(r.x1-r.x0)*(r.y1-r.y0))>0.5;
+    });
+    if(!dup)dedup.push(r);
+  }
+  const squares=dedup.filter(r=>{const s=Math.min(r.w,r.h),l=Math.max(r.w,r.h);return s>=280&&s<=650&&l>=280&&l<=650;});
+  dedup.forEach(b=>{
     b.support=squares.filter(q=>{
+      if(q===b)return false;
       const dx=Math.max(b.x0-q.x1,q.x0-b.x1,0),dy=Math.max(b.y0-q.y1,q.y0-b.y1,0);
       return Math.hypot(dx,dy)*mmPerPt<800;
     }).length;
   });
-  window.lastVec={mmPerPt,segments:strokes.length,rects,fills,beds,pH,pV};
+  const beds=dedup.filter(r=>{const s=Math.min(r.w,r.h),l=Math.max(r.w,r.h);return r.support>=2&&s>=800&&s<=1950&&l>=1750&&l<=2150;});
+  const nearBand=dedup.filter(r=>{const l=Math.max(r.w,r.h);return l>=1500&&l<=2300;});
+  const gapHist={};
+  [...pH.gaps,...pV.gaps].forEach(g=>{const b=Math.floor(g/20)*20,k=b+'–'+(b+20);gapHist[k]=(gapHist[k]||0)+1;});
+  window.lastVec={mmPerPt,segments:strokes.length,rects,fills,beds,dedup,asmCount:asm.length,pH,pV};
   const topW=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([w,n])=>w+'pt×'+n).join(', ')||'—';
   let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V) · '+rects.length+' rects · '+fills.length+' fills<br>';
   h2+='<b>Wall pairs</b> (dark, parallel, 60–350mm apart, &gt;50% overlap): H='+pH.pairs+' (of '+pH.n+' dark H) V='+pV.pairs+' (of '+pV.n+' dark V)<br>';
   h2+='<small>paired widths H: '+topW(pH.wHist)+' · V: '+topW(pV.wHist)+'</small><br>';
-  h2+='<b>Bed rects</b> ('+beds.length+'): '+beds.slice(0,8).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+'mm sup'+b.support).join(' · ')+'<br>';
+  h2+='<b>Bed rects</b> ('+beds.length+' of '+dedup.length+' dedup, '+asm.length+' assembled-open): '+beds.slice(0,8).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+'mm sup'+b.support).join(' · ')+'<br>';
+  h2+='<b>Near bed band</b> (long side 1500–2300): '+nearBand.slice(0,10).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?' open':' closed')+' sup'+b.support).join(' · ')+'<br>';
+  h2+='<b>Pair-gap histogram</b> (20mm bins): '+Object.entries(gapHist).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,n])=>k+'mm×'+n).join(', ')+'<br>';
+  h2+='<b>Dark fills top 8 by area</b> (wall poche / robe hatch candidates)<table><tr><th>color</th><th>W×H mm</th></tr>';
+  fills.map(f=>({f,a:(f.x1-f.x0)*(f.y1-f.y0)})).sort((a,b)=>b.a-a.a).filter(({f})=>isDark(f.c)).slice(0,8).forEach(({f})=>{
+    h2+='<tr><td>'+(f.c?f.c.join(','):'pattern')+'</td><td>'+Math.round((f.x1-f.x0)*mmPerPt)+'×'+Math.round((f.y1-f.y0)*mmPerPt)+'</td></tr>';
+  });
+  h2+='</table>';
   h2+='<b>Fills top 8 by area</b><table><tr><th>color</th><th>W×H mm</th></tr>';
   fills.map(f=>({f,a:(f.x1-f.x0)*(f.y1-f.y0)})).sort((a,b)=>b.a-a.a).slice(0,8).forEach(({f})=>{
     h2+='<tr><td>'+(f.c?f.c.join(','):'?')+'</td><td>'+Math.round((f.x1-f.x0)*mmPerPt)+'×'+Math.round((f.y1-f.y0)*mmPerPt)+'</td></tr>';
@@ -431,17 +496,34 @@ function biggestIsMain(){
 document.getElementById('autoBtn').onclick=()=>{
   if(!bg){alert('Load a PDF first');return;}
   if(!pxPerMm){alert('Scale not set — render PDF first (auto-scale reads the title block).');return;}
-  const beds=+document.getElementById('bedcount').value||2;
+  const wantBeds=+document.getElementById('bedcount').value||2;
   const W=bg.width,H=bg.height,s=pxPerMm;
   rooms=[];excls=[];sel=null;
   const R=(type,label,wf,hf,fx,fy)=>({id:uid++,type,label,x:W*fx,y:H*fy,wMm:W*wf/s,dMm:H*hf/s,rot:0});
   const E=(label,wf,hf,fx,fy)=>({id:uid++,label,x:W*fx,y:H*fy,wMm:W*wf/s,dMm:H*hf/s,rot:0});
-  if(beds===1){rooms.push(R('main','BEDROOM 1',0.30,0.36,0.42,0.55));excls.push(E('ROBE (excluded)',0.07,0.28,0.60,0.55));}
-  if(beds===2){rooms.push(R('main','BEDROOM 1',0.26,0.36,0.32,0.55));rooms.push(R('other','BEDROOM 2',0.26,0.36,0.64,0.55));excls.push(E('ROBE (excluded)',0.06,0.28,0.48,0.55));}
-  if(beds===3){rooms.push(R('main','BEDROOM 1',0.20,0.36,0.24,0.55));rooms.push(R('other','BEDROOM 2',0.20,0.36,0.50,0.55));rooms.push(R('other','BEDROOM 3',0.20,0.36,0.76,0.55));excls.push(E('ROBE (excluded)',0.05,0.28,0.37,0.55));excls.push(E('ROBE (excluded)',0.05,0.28,0.63,0.55));}
+  const seeds=(window.lastVec&&window.lastVec.beds&&window.lastVec.beds.length)?window.lastVec.beds.slice().sort((a,b)=>b.w*b.h-a.w*a.h).slice(0,3):[];
+  let seedMsg='';
+  if(seeds.length){
+    const ptW=W/RENDER,ptH=H/RENDER;
+    seeds.forEach((b,i)=>{
+      const cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2;
+      const wMm=Math.max(3400,Math.round((Math.max(b.w,b.h)+800)/10)*10);
+      const dMm=Math.max(3200,Math.round((Math.min(b.w,b.h)+800)/10)*10);
+      rooms.push({id:uid++,type:'other',label:'BEDROOM '+(i+1),x:cx/ptW*W,y:(ptH-cy)/ptH*H,wMm,dMm,rot:0});
+    });
+    seedMsg='Seeded '+seeds.length+' boxes on detected beds. ';
+  }else{
+    if(wantBeds===1){rooms.push(R('main','BEDROOM 1',0.30,0.36,0.42,0.55));}
+    if(wantBeds===2){rooms.push(R('main','BEDROOM 1',0.26,0.36,0.32,0.55));rooms.push(R('other','BEDROOM 2',0.26,0.36,0.64,0.55));}
+    if(wantBeds===3){rooms.push(R('main','BEDROOM 1',0.20,0.36,0.24,0.55));rooms.push(R('other','BEDROOM 2',0.20,0.36,0.50,0.55));rooms.push(R('other','BEDROOM 3',0.20,0.36,0.76,0.55));}
+    seedMsg='No beds detected — placed '+wantBeds+' fallback boxes. ';
+  }
+  if(wantBeds===1){excls.push(E('ROBE (excluded)',0.07,0.28,0.60,0.55));}
+  if(wantBeds===2){excls.push(E('ROBE (excluded)',0.06,0.28,0.48,0.55));}
+  if(wantBeds===3){excls.push(E('ROBE (excluded)',0.05,0.28,0.37,0.55));excls.push(E('ROBE (excluded)',0.05,0.28,0.63,0.55));}
   biggestIsMain();
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
-  document.getElementById('autoMsg').innerHTML='<small>Placed '+beds+' bedroom boxes + robe exclusions. Drag edges to wall inner faces; biggest auto-tagged MAIN.</small>';
+  document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+'Drag edges to wall inner faces; biggest auto-tagged MAIN.</small>';
   draw();renderList();
 };
 
