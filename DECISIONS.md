@@ -265,6 +265,13 @@ Entries stay chronological; the live question is always the last entry.
   inflating hairline pairs and starving planes. Now LW is extracted (counter printed).
 - Raster table ruled out a raster base (8.5% peak = linework density, not solid walls).
 
+## 2026-09-16 — v5.7: room-band diagnostic (built, pushed as b14f105)
+
+- 0 gstate-LW killed the ExtGState theory. Standing model: the apartment is drawn in thin
+  lines throughout (outlines + dense hatch reading black); fills and heavies belong to
+  legend/off-page content. Prints 2.4–6m enclosed rects — if the bedroom outline assembles,
+  v6 seeds rooms from it instead of chasing beds.
+
 ## 2026-09-16 — v5.5: raster-or-vector test (built, pushed)
 
 - Zoomed overlay: bedroom walls carry NO overlay class at all — absent from parse, not misplaced.
