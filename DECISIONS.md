@@ -258,6 +258,13 @@ Entries stay chronological; the live question is always the last entry.
 - Purpose: one zoomed screenshot shows which bedroom walls parse as what — no more aggregate
   table guessing. Live: awaiting that screenshot.
 
+## 2026-09-16 — v5.6: ExtGState line widths (built, pushed)
+
+- New suspect for missing bedroom walls: weights set via `/GS gs` (LW in graphics state),
+  which the parser ignored — those strokes kept whatever width came before (often 0.24),
+  inflating hairline pairs and starving planes. Now LW is extracted (counter printed).
+- Raster table ruled out a raster base (8.5% peak = linework density, not solid walls).
+
 ## 2026-09-16 — v5.5: raster-or-vector test (built, pushed)
 
 - Zoomed overlay: bedroom walls carry NO overlay class at all — absent from parse, not misplaced.

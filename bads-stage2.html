@@ -332,12 +332,13 @@ async function runVecV2(out){
     closeEOFillStroke:oid('closeEOFillStroke'),clip:oid('clip'),eoClip:oid('eoClip'),endPath:oid('endPath'),
     setLineWidth:oid('setLineWidth'),setStrokeRGBColor:oid('setStrokeRGBColor'),setFillRGBColor:oid('setFillRGBColor'),
     setStrokeColor:oid('setStrokeColor'),setFillColor:oid('setFillColor'),setStrokeGray:oid('setStrokeGray'),
-    setFillGray:oid('setFillGray'),formBegin:oid('paintFormXObjectBegin'),formEnd:oid('paintFormXObjectEnd')};
+    setFillGray:oid('setFillGray'),formBegin:oid('paintFormXObjectBegin'),formEnd:oid('paintFormXObjectEnd'),
+    setGState:oid('setGState')};
   const mmPerPt=25.4/72*autoDenom;
   const normC=a=>{if(!a||!a.length)return null;const v=x=>x>1?Math.round(x):Math.round(x*255);if(a.length===1){const g=v(a[0]);return[g,g,g];}return[v(a[0]),v(a[1]),v(a[2])];};
   const mult=(m,t)=>[m[0]*t[0]+m[1]*t[2],m[0]*t[1]+m[1]*t[3],m[2]*t[0]+m[3]*t[2],m[2]*t[1]+m[3]*t[3],m[4]*t[0]+m[5]*t[2]+t[4],m[4]*t[1]+m[5]*t[3]+t[5]];
   const P0=(m,x,y)=>[m[0]*x+m[2]*y+m[4],m[1]*x+m[3]*y+m[5]];
-  let ctm=[1,0,0,1,0,0],lw=1,sc=null,fc=null;const stack=[];
+  let ctm=[1,0,0,1,0,0],lw=1,sc=null,fc=null,gsLW=0;const stack=[];
   let cur=[];const strokes=[],fills=[],rects=[];
   const pushRect=(x0,y0,x1,y1)=>{
     const xa=Math.min(x0,x1),xb=Math.max(x0,x1),ya=Math.min(y0,y1),yb=Math.max(y0,y1);
@@ -359,6 +360,7 @@ async function runVecV2(out){
     if(f===O.formBegin){stack.push({lw,sc,fc,ctm:ctm.slice()});if(Array.isArray(a[0])&&a[0].length>=6)ctm=mult(ctm,a[0].slice(0,6));continue;}
     if(f===O.formEnd){const s=stack.pop();if(s){lw=s.lw;sc=s.sc;fc=s.fc;ctm=s.ctm;}continue;}
     if(f===O.setLineWidth){lw=+a[0]||lw;continue;}
+    if(f===O.setGState){const gs=a[0]||[];for(const kv of gs){if(Array.isArray(kv)&&kv[0]==='LW'&&+kv[1]>0){lw=+kv[1];gsLW++;}}continue;}
     if(f===O.setStrokeRGBColor){sc=normC(a);continue;}
     if(f===O.setFillRGBColor){fc=normC(a);continue;}
     if(f===O.setStrokeColor||f===O.setStrokeGray){const c=normC(a);if(c)sc=c;continue;}
@@ -575,7 +577,7 @@ async function runVecV2(out){
   window.lastVec={mmPerPt,segments:strokes.length,strokes,cuN,rects,fills,beds,dedup,nearBand,asmCount:asm.length,cornerN,corners:window.__corners||[],pH,pV,planesH,planesV};
   window.lastVecKey=fileName+'|'+document.getElementById('pageno').value;
   const topW=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([w,n])=>w+'pt×'+n).join(', ')||'—';
-  let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V, '+cuN+' curve-out) · '+rects.length+' rects · '+cornerN+' corners · '+fills.length+' fills<br>';
+  let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V, '+cuN+' curve-out, '+gsLW+' gstate-LW) · '+rects.length+' rects · '+cornerN+' corners · '+fills.length+' fills<br>';
   h2+='<b>Wall planes</b>: H='+planesH.length+' V='+planesV.length+' (fill edges + ≥0.6pt dark strokes, 10mm bins)<br>';
   const pl=(p,horiz)=>Math.round((horiz?(pgH-p.c):p.c)*mmPerPt)+'mm @'+(horiz?Math.round(p.a0*mmPerPt)+'–'+Math.round(p.a1*mmPerPt):Math.round((pgH-p.a1)*mmPerPt)+'–'+Math.round((pgH-p.a0)*mmPerPt))+' sup'+Math.round(p.sup);
   h2+='<small>H: '+planesH.map(p=>pl(p,true)).join(' · ')+'<br>V: '+planesV.map(p=>pl(p,false)).join(' · ')+'</small><br>';
