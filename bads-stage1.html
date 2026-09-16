@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BADs Stage 2 — Assume Room + Place</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;display:flex;height:100vh;font-size:15px}
+  #side{flex:0 0 400px;min-width:400px;max-width:400px;padding:16px;border-right:1px solid #ddd;overflow-y:auto;background:#fff;box-sizing:border-box}
+  #wrap{flex:1;min-width:0;position:relative;background:#222;overflow:hidden}
+  canvas{display:block;cursor:crosshair;max-width:100%}
+  button,input,select{margin:4px 0;padding:6px;width:100%;box-sizing:border-box}
+  .row{display:flex;gap:6px}.row>*{flex:1}
+  .boxbtn{font-weight:600}
+  small{color:#555} .ok{color:green}.warn{color:#a00}
+  #calibBar{background:#fffae6;border:1px solid #e6c200;padding:6px;margin:6px 0;display:none}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+<div id="side">
+  <h3>BADs Stage 2 — Assume room + place</h3>
+  <small>Target: FH plan p.4 A853. Pick a room type, click in the room to place. Main 3.0×3.4 (10.2m²) / Other 3.0×3.0 (9m²) / Living 2+bed ≥3.6m + ≥12m². Wardrobe extra.</small>
+  <hr>
+  <label>Plan file (PDF or PNG/JPG export of p.4)</label>
+  <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg">
+  <label>PDF page (default 4)</label>
+  <input type="number" id="pageno" value="4" min="1">
+  <button id="loadPdf">Render PDF page</button>
+  <button id="autoScale">Auto-scale from footer (1:100 @ A1)</button>
+  <div id="calibBar">Calibrate: click 2 points on a known wall, then enter real mm below.</div>
+  <button id="calibBtn">Manual check: 2-click calibration (optional)</button>
+  <div class="row"><input id="realmm" type="number" value="5400"><button id="setscale">Set mm</button></div>
+  <div id="scaleOut"><small>Scale: not set — boxes will warn until calibrated.</small></div>
+  <hr>
+  <button class="boxbtn" id="addMain">+ Main Bedroom 3000×3400 — click to place</button>
+  <button class="boxbtn" id="addOther">+ Other Bedroom 3000×3000 — click to place</button>
+  <button class="boxbtn" id="addLiving">+ Living 2+bed — click to place</button>
+  <div id="placeBar" style="display:none;background:#e8f5e9;border:1px solid #00c853;padding:6px;margin:6px 0"><small id="placeTxt">Click on plan to place… Esc to cancel</small></div>
+  <div class="row">
+    <div><label>W mm</label><input id="editW" type="number" value="3600"></div>
+    <div><label>D mm</label><input id="editD" type="number" value="3400"></div>
+    <div><label>Rot°</label><input id="editR" type="number" value="0"></div>
+  </div>
+  <small>Select a box (click), then edit W/D/Rot here. Living shows live width + area. Drag to move. R = rotate 90°.</small>
+  <div class="row"><button id="rot90">Rotate 90°</button><button id="delBox">Delete</button></div>
+  <hr>
+  <label>Unit / test name</label><input id="unit" value="L1-2bed">
+  <div class="row"><button id="save">Save</button><button id="load">Load</button></div>
+  <div class="row"><button id="expJson">Export JSON</button><button id="impJson">Import JSON</button></div>
+  <input type="file" id="jsonFile" accept=".json" style="display:none">
+  <hr>
+  <div class="row"><button id="zin">Zoom +</button><button id="zout">Zoom −</button><button id="reset">Reset view</button></div>
+  <button id="export">Export PNG snapshot</button>
+  <button id="clear">Clear boxes</button>
+  <div id="info"></div>
+</div>
+<div id="wrap"><canvas id="c" width="1200" height="800"></canvas></div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let bg=null,view={s:1,ox:20,oy:20},boxes=[],sel=null;
+let pxPerMm=null,calibPts=[],calibMode=false,fileBuf=null,placeMode=null;
+function passes(b){const a=b.wMm*b.dMm/1e6,mn=Math.min(b.wMm,b.dMm);
+  if(b.type==='main')return (b.wMm>=3000&&b.dMm>=3400)||(b.wMm>=3400&&b.dMm>=3000);
+  if(b.type==='other')return mn>=3000;
+  if(b.type==='living')return mn>=3600&&a>=12;return true;}
+
+function draw(){
+  ctx.fillStyle='#333';ctx.fillRect(0,0,cv.width,cv.height);
+  if(bg){const w=bg.width*view.s,h=bg.height*view.s;ctx.drawImage(bg,view.ox,view.oy,w,h);}
+  // calib points
+  ctx.fillStyle='yellow';
+  calibPts.forEach(p=>{ctx.beginPath();ctx.arc(view.ox+p.x*view.s,view.oy+p.y*view.s,6,0,7);ctx.fill();});
+  boxes.forEach((b,i)=>{
+    const ok=passes(b);
+    ctx.save();
+    const cx=view.ox+b.x*view.s,cy=view.oy+b.y*view.s;
+    ctx.translate(cx,cy);ctx.rotate(b.rot*Math.PI/180);
+    const w=b.wMm*pxPerMmScale()*view.s,h=b.dMm*pxPerMmScale()*view.s;
+    ctx.fillStyle=ok?'rgba(0,200,83,0.28)':'rgba(255,30,30,0.32)';
+    ctx.strokeStyle=(sel===b)?'#ff0':(ok?'#00c853':'#ff2222');ctx.lineWidth=(sel===b)?3:2.5;
+    ctx.fillRect(-w/2,-h/2,w,h);ctx.strokeRect(-w/2,-h/2,w,h);
+    ctx.rotate(-b.rot*Math.PI/180);
+    ctx.fillStyle='#fff';ctx.font='bold 13px system-ui';ctx.textAlign='center';
+    const area=(b.wMm*b.dMm/1e6).toFixed(2);
+    ctx.fillText((ok?'✓ ':'✗ ')+b.label,0,-6);
+    ctx.fillText(b.wMm+' x '+b.dMm+'mm ('+area+'m²)',0,14);
+    ctx.restore();
+  });
+  requestAnimationFrame(()=>{});
+}
+function pxPerMmScale(){return pxPerMm||0.5;} // fallback so boxes visible pre-calib
+function refresh(){draw();updateInfo();}
+function updateInfo(){
+  const el=document.getElementById('info'),so=document.getElementById('scaleOut');
+  so.innerHTML=pxPerMm?'<small class=ok>Scale: '+pxPerMm.toFixed(4)+' px/mm (1:'+autoDenom+' @A1 auto, manual override ok)</small>':'<small class=warn>Scale: not set — load p.4 first</small>';
+  if(!sel){el.innerHTML='<small>No box selected.</small>';return;}
+  const area=(sel.wMm*sel.dMm/1e6).toFixed(2);
+  let msg='<b>'+sel.label+'</b><br>'+sel.wMm+' x '+sel.dMm+'mm = '+area+'m²<br>';
+  const ok=passes(sel);
+  if(sel.type==='living'){msg+='Need: min width 3600 + ≥12m². '+(ok?'<span class=ok>PASS</span>':'<span class=warn>FAIL</span>');}
+  if(sel.type==='main'){msg+='Need: 3000×3400 (either orientation) + wardrobe extra. '+(ok?'<span class=ok>PASS</span>':'<span class=warn>FAIL</span>');}
+  if(sel.type==='other'){msg+='Need: min 3000×3000 + wardrobe extra. '+(ok?'<span class=ok>PASS</span>':'<span class=warn>FAIL</span>');}
+  el.innerHTML='<small>'+msg+'</small>';
+  document.getElementById('editW').value=sel.wMm;document.getElementById('editD').value=sel.dMm;document.getElementById('editR').value=sel.rot;
+}
+function toImg(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left-view.ox)/view.s,y:(e.clientY-r.top-view.oy)/view.s};}
+let drag=null;
+cv.addEventListener('pointerdown',e=>{
+  const p=toImg(e);
+  if(calibMode){calibPts.push(p);if(calibPts.length===2){document.getElementById('calibBar').textContent='Now enter real mm and press Set mm.';}draw();return;}
+  if(placeMode){if(!bg){alert('Load p.4 first');return;}
+    const b={...placeMode,x:p.x,y:p.y};boxes.push(b);sel=b;placeMode=null;
+    document.getElementById('placeBar').style.display='none';updateInfo();draw();return;}
+  // hit test boxes (unrotate)
+  sel=null;
+  for(let i=boxes.length-1;i>=0;i--){const b=boxes[i];
+    const dx=p.x-b.x,dy=p.y-b.y,rad=-b.rot*Math.PI/180;
+    const lx=dx*Math.cos(rad)-dy*Math.sin(rad),ly=dx*Math.sin(rad)+dy*Math.cos(rad);
+    const wpx=b.wMm*pxPerMmScale()/2,hpx=b.dMm*pxPerMmScale()/2;
+    if(Math.abs(lx)<wpx&&Math.abs(ly)<hpx){sel=b;drag={b,dx:p.x-b.x,dy:p.y-b.y};break;}
+  }
+  updateInfo();draw();
+});
+cv.addEventListener('pointermove',e=>{if(drag){const p=toImg(e);drag.b.x=p.x-drag.dx;drag.b.y=p.y-drag.dy;draw();}});
+window.addEventListener('pointerup',()=>drag=null);
+function zoomAt(mx,my,f){const s0=view.s,s1=Math.min(20,Math.max(0.05,s0*f));const ix=(mx-view.ox)/s0,iy=(my-view.oy)/s0;view.s=s1;view.ox=mx-ix*s1;view.oy=my-iy*s1;draw();}
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.clientX-r.left,e.clientY-r.top,e.deltaY<0?1.15:1/1.15);},{passive:false});
+
+document.getElementById('file').onchange=e=>{const f=e.target.files[0];if(!f)return;
+  if(f.type==='application/pdf'){const r=new FileReader();r.onload=()=>{fileBuf=r.result;renderPdf();};r.readAsArrayBuffer(f);}
+  else{const img=new Image();img.onload=()=>{bg=img;fitView();};img.src=URL.createObjectURL(f);}
+};
+const RENDER=2;let autoDenom=100,lastPage=null;
+async function renderPdf(){if(!fileBuf)return;
+  const pdf=await pdfjsLib.getDocument({data:fileBuf}).promise;
+  const n=Math.min(Math.max(1,+document.getElementById('pageno').value||4),pdf.numPages);
+  const page=await pdf.getPage(n);lastPage=page;
+  const vp=page.getViewport({scale:RENDER});
+  const tmp=document.createElement('canvas');tmp.width=vp.width;tmp.height=vp.height;
+  await page.render({canvasContext:tmp.getContext('2d'),viewport:vp}).promise;
+  const img=new Image();img.onload=()=>{bg=img;fitView();autoScaleFromFooter();};img.src=tmp.toDataURL();
+}
+async function autoScaleFromFooter(){
+  try{
+    if(!lastPage||!bg)return 'no page';
+    const tc=await lastPage.getTextContent();
+    const txt=tc.items.map(i=>i.str).join(' ');
+    const m=txt.match(/1\s*:\s*(\d+)/);
+    if(m)autoDenom=+m[1];
+    // paper size from PDF points -> mm, then x denom = real mm
+    const vp1=lastPage.getViewport({scale:1});
+    const paperMmW=vp1.width*25.4/72;
+    const realMmW=paperMmW*autoDenom;
+    pxPerMm=bg.width/realMmW;calibMode=false;
+    document.getElementById('scaleOut').innerHTML='<small class=ok>Auto-scale: footer 1:'+autoDenom+' @A1 → '+pxPerMm.toFixed(4)+' px/mm. Verify on a known wall.</small>';
+    updateInfo();draw();return '1:'+autoDenom;
+  }catch(err){document.getElementById('scaleOut').innerHTML='<small class=warn>Auto-scale failed, use manual 2-click.</small>';return 'fail';}
+}
+document.getElementById('autoScale').onclick=autoScaleFromFooter;
+document.getElementById('loadPdf').onclick=renderPdf;
+function fitView(){if(!bg)return;view.s=Math.min(cv.width/bg.width,cv.height/bg.height)*0.95;view.ox=20;view.oy=20;draw();}
+function armPlace(type,label,w,d,color){if(!bg){alert('Load p.4 first');return;}
+  placeMode={type,label,wMm:w,dMm:d,rot:0,color};
+  document.getElementById('placeBar').style.display='block';
+  document.getElementById('placeTxt').textContent='Placing '+label+' '+w+'x'+d+' — click inside the room. Esc cancels.';}
+function mkBox(type,label,w,d,color){armPlace(type,label,w,d,color);}
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){placeMode=null;document.getElementById('placeBar').style.display='none';}});
+document.getElementById('addMain').onclick=()=>mkBox('main','MAIN BED',3000,3400,'#00c853');
+document.getElementById('addOther').onclick=()=>mkBox('other','BEDROOM',3000,3000,'#2979ff');
+document.getElementById('addLiving').onclick=()=>mkBox('living','LIVING 2+ BED',3600,3400,'#ff6d00');
+document.getElementById('calibBtn').onclick=()=>{calibPts=[];calibMode=true;document.getElementById('calibBar').style.display='block';};
+document.getElementById('setscale').onclick=()=>{
+  if(calibPts.length<2){alert('Click 2 points first');return;}
+  const dx=calibPts[0].x-calibPts[1].x,dy=calibPts[0].y-calibPts[1].y;
+  const px=Math.hypot(dx,dy),mm=+document.getElementById('realmm').value;
+  if(!px||!mm)return;pxPerMm=px/mm;calibMode=false;
+  document.getElementById('calibBar').style.display='none';updateInfo();draw();
+};
+['editW','editD','editR'].forEach(id=>document.getElementById(id).oninput=e=>{
+  if(!sel)return;if(id==='editW')sel.wMm=+e.target.value;if(id==='editD')sel.dMm=+e.target.value;if(id==='editR')sel.rot=+e.target.value;updateInfo();draw();});
+document.getElementById('rot90').onclick=()=>{if(!sel)return;const t=sel.wMm;sel.wMm=sel.dMm;sel.dMm=t;sel.rot=(sel.rot+90)%180;updateInfo();draw();};
+document.getElementById('delBox').onclick=()=>{if(!sel)return;boxes=boxes.filter(b=>b!==sel);sel=null;updateInfo();draw();};
+function storeKey(){return 'bads2-'+(document.getElementById('unit').value||'unit');}
+document.getElementById('save').onclick=()=>{localStorage.setItem(storeKey(),JSON.stringify({denom:autoDenom,boxes}));alert('Saved '+boxes.length+' boxes for '+storeKey());};
+document.getElementById('load').onclick=()=>{const s=localStorage.getItem(storeKey());if(!s){alert('No save for '+storeKey());return;}const o=JSON.parse(s);boxes=o.boxes||[];sel=boxes[0]||null;updateInfo();draw();};
+document.getElementById('expJson').onclick=()=>{const a=document.createElement('a');a.download=storeKey()+'.json';a.href=URL.createObjectURL(new Blob([JSON.stringify({unit:document.getElementById('unit').value,denom:autoDenom,boxes},null,2)],{type:'application/json'}));a.click();};
+document.getElementById('impJson').onclick=()=>document.getElementById('jsonFile').click();
+document.getElementById('jsonFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const o=JSON.parse(r.result);boxes=o.boxes||[];sel=boxes[0]||null;updateInfo();draw();};r.readAsText(f);};
+document.getElementById('zin').onclick=()=>zoomAt(cv.width/2,cv.height/2,1.25);
+document.getElementById('zout').onclick=()=>zoomAt(cv.width/2,cv.height/2,1/1.25);
+document.getElementById('reset').onclick=fitView;
+document.getElementById('clear').onclick=()=>{boxes=[];sel=null;updateInfo();draw();};
+document.getElementById('export').onclick=()=>{const a=document.createElement('a');a.download='bads-stage1.png';a.href=cv.toDataURL();a.click();};
+function size(){cv.width=document.getElementById('wrap').clientWidth;cv.height=window.innerHeight;draw();}
+window.onresize=size;size();draw();
+</script>
+</body>
+</html>

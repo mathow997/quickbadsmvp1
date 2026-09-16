@@ -1,0 +1,70 @@
+{
+  "unit": "B",
+  "denom": 100,
+  "pxPerMm": 0.05669291338582677,
+  "rooms": [],
+  "excls": [],
+  "units": [
+    {
+      "id": 1,
+      "label": "UNIT A (top-left)",
+      "kind": "DS-living",
+      "x": 1793.2378679537,
+      "y": 909.36,
+      "wMm": 10480,
+      "dMm": 5940,
+      "rot": 0
+    },
+    {
+      "id": 2,
+      "label": "UNIT B (top-mid)",
+      "kind": "DS-living",
+      "x": 2922.5829350699637,
+      "y": 914.5847209253772,
+      "wMm": 9950,
+      "dMm": 5940,
+      "rot": 0
+    },
+    {
+      "id": 3,
+      "label": "UNIT C (top-right)",
+      "kind": "1bed",
+      "x": 1783.440365605035,
+      "y": 1240.7631404743313,
+      "wMm": 10070,
+      "dMm": 5700,
+      "rot": 0
+    },
+    {
+      "id": 4,
+      "label": "UNIT D (bot-left)",
+      "kind": "DS-living",
+      "x": 2918.4367315669792,
+      "y": 1240.902703052919,
+      "wMm": 9950,
+      "dMm": 5600,
+      "rot": 0
+    },
+    {
+      "id": 5,
+      "label": "UNIT E (bot-mid)",
+      "kind": "3bed",
+      "x": 1989.10971105327,
+      "y": 1812.0776979407865,
+      "wMm": 15530,
+      "dMm": 11230,
+      "rot": 0
+    },
+    {
+      "id": 6,
+      "label": "UNIT F (bot-right)",
+      "kind": "3bed",
+      "x": 2739.303387762706,
+      "y": 1762.5698328404499,
+      "wMm": 11070,
+      "dMm": 9750,
+      "rot": 0
+    }
+  ],
+  "activeUnitId": 5
+}

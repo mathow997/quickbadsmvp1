@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BADs Stage 2 — Auto-measure rooms</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;display:flex;height:100vh;font-size:14px}
+  #side{flex:0 0 410px;min-width:410px;max-width:410px;padding:14px;border-right:1px solid #ddd;overflow-y:auto;background:#fff;box-sizing:border-box}
+  #wrap{flex:1;min-width:0;position:relative;background:#222;overflow:hidden}
+  canvas{display:block;cursor:crosshair}
+  button,input,select{margin:4px 0;padding:6px;width:100%;box-sizing:border-box}
+  .row{display:flex;gap:6px}.row>*{flex:1}
+  small{color:#555}.ok{color:green}.warn{color:#a00}
+  #calibBar{background:#fffae6;border:1px solid #e6c200;padding:6px;margin:6px 0;display:none}
+  .card{border:1px solid #ddd;padding:6px;margin:6px 0;background:#fafafa}
+  .roomrow{border:1px solid #ddd;padding:6px;margin:4px 0;background:#fff}
+  .roomrow b{font-size:13px}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+<body>
+<div id="side">
+  <h3>BADs Stage 2 — Auto-measure</h3>
+  <small>Load FH p.4 → <b>Auto-measure unit</b> drops all room boxes snapped to actual walls. Boxes show <b>actual size</b>, dotted guideline style. Brown X = exclusions (working only, never exported). Drag edges to re-snap.</small>
+  <hr>
+  <label>Plan file (PDF keeps vectors for export, or PNG/JPG)</label>
+  <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg">
+  <label>PDF page (default 4)</label>
+  <input type="number" id="pageno" value="4" min="1">
+  <div class="row"><button id="loadPdf">Render PDF page</button><button id="autoScale">Auto-scale</button></div>
+  <div id="calibBar">Calibrate: click 2 points on a known wall, then enter real mm below.</div>
+  <button id="calibBtn">Manual check: 2-click calibration (optional)</button>
+  <div class="row"><input id="realmm" type="number" value="5400"><button id="setscale">Set mm</button></div>
+  <div id="scaleOut"><small>Scale: not set.</small></div>
+  <hr>
+  <button id="findUnits" style="font-weight:700;background:#e3f2fd;border:2px solid #1976d2;padding:10px">⬛ 1 — FIND UNITS (auto-place, then adjust)</button>
+  <small>Sheet has multiple apartments. This drops a blue box where it thinks each unit is. Drag edges to fit the unit walls, click Select to make it active.</small>
+  <div class="row"><button id="prevUnit">◀ Prev unit</button><button id="nextUnit">Next unit ▶</button></div>
+  <button id="autoBtn" style="font-weight:700;background:#e8f5e9;border:2px solid #00c853;padding:10px">⚡ 2 — AUTO-MEASURE INSIDE ACTIVE UNIT</button>
+  <small>Auto-places Living + Main + Other + kitchen/robe exclusions inside the blue unit box. Then drag room edges to snap to wall inner faces.</small>
+  <div class="row">
+    <button id="addRoom">+ Room box</button>
+    <button id="addExcl">+ Exclusion (X)</button>
+  </div>
+  <div class="row"><button id="addUnit">+ Unit box</button><button id="lockUnits">🔒 Lock blues</button></div>
+  <div class="row"><button id="traceUnit">✏️ Trace polygon</button><button id="rectToPoly">⬛→⬠ Rect→poly</button></div>
+  <div class="row"><button id="snapWalls">🧲 Snap poly to walls</button><button id="bedOnly">🛏 Bedrooms only</button></div>
+  <small>Trace: click wall corners, double-click to finish. Poly: drag dots, click edge dot to add vertex, Alt+click dot deletes. Snap pulls poly to nearest thick dark walls.</small>
+  <label><input type="checkbox" id="hideUnits" style="width:auto"> Hide blue unit boxes (select rooms underneath)</label><br>
+  <label><input type="checkbox" id="hideExcl" style="width:auto"> Hide exclusions (also never exported)</label><br>
+  <label><input type="checkbox" id="contrast" style="width:auto"> Wall contrast boost</label><br>
+  <label><input type="checkbox" id="showIds" checked style="width:auto"> Show dimensions</label>
+  <hr>
+  <div id="rooms"></div>
+  <hr>
+  <label>Unit / test name</label><input id="unit" value="L1-2bed">
+  <div class="row"><button id="save">Save</button><button id="load">Load</button></div>
+  <div class="row"><button id="expJson">Export JSON</button><button id="impJson">Import JSON</button></div>
+  <input type="file" id="jsonFile" accept=".json" style="display:none">
+  <hr>
+  <div class="row"><button id="zin">Zoom +</button><button id="zout">Zoom −</button><button id="reset">Reset</button></div>
+  <small>Pan: middle-drag / space-drag / right-drag. Wheel = zoom to cursor. Drag inside = move. Drag square handles = snap edge to wall.</small>
+  <div class="row"><button id="exportPng">PNG snapshot</button><button id="exportPdf">Export PDF (vectors)</button></div>
+  <button id="clear">Clear all</button>
+  <div id="info"></div>
+  <div id="autoMsg"><small></small></div>
+</div>
+<div id="wrap"><canvas id="c" width="1200" height="800"></canvas></div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let bg=null,view={s:1,ox:20,oy:20};
+let rooms=[],excls=[],units=[],activeUnitId=null,sel=null; // sel={kind:'room'|'excl'|'unit',ref}
+let pxPerMm=null,calibPts=[],calibMode=false,fileBuf=null,fileName='',isPdf=false;
+let uid=1;
+const RENDER=2;let autoDenom=100,lastPage=null,lastText=[];
+const MINIMA={main:{w:3000,d:3400,note:'3.0 x 3.4'},other:{w:3000,d:3000,note:'3.0 x 3.0'},living:{w:3600,area:12,note:'3.6m min + 12m2'}};
+
+// ---------- geometry helpers (axis-aligned, rot 0/90 only) ----------
+function pxSizeW(b){const s=pxPerMm||0.5;return ((b.rot%180===0)?b.wMm:b.dMm)*s;}
+function pxSizeH(b){const s=pxPerMm||0.5;return ((b.rot%180===0)?b.dMm:b.wMm)*s;}
+// ----- polygon units (non-rectangular; pts in image px) -----
+function unitPts(u){
+  if(u.poly&&u.poly.length>=3)return u.poly;
+  const w=pxSizeW(u)/2,h=pxSizeH(u)/2;
+  return[[u.x-w,u.y-h],[u.x+w,u.y-h],[u.x+w,u.y+h],[u.x-w,u.y+h]];
+}
+function polyAreaPx(pts){let a=0;for(let i=0;i<pts.length;i++){const[x1,y1]=pts[i],[x2,y2]=pts[(i+1)%pts.length];a+=x1*y2-x2*y1;}return Math.abs(a/2);}
+function pip(pts,x,y){let inside=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const[xi,yi]=pts[i],[xj,yj]=pts[j];if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))inside=!inside;}return inside;}
+function unitBBox(u){const p=unitPts(u);let x0=1e18,y0=1e18,x1=-1e18,y1=-1e18;p.forEach(([x,y])=>{x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y);});return{x0,y0,x1,y1,cx:(x0+x1)/2,cy:(y0+y1)/2,w:x1-x0,h:y1-y0};}
+function rectToPoly(u){u.poly=unitPts(u).map(p=>[Math.round(p[0]),Math.round(p[1])]);}
+function overlapPx(a,b){
+  const aw=pxSizeW(a)/2,ah=pxSizeH(a)/2,bw=pxSizeW(b)/2,bh=pxSizeH(b)/2;
+  const ox=Math.max(0,Math.min(a.x+aw,b.x+bw)-Math.max(a.x-aw,b.x-bw));
+  const oy=Math.max(0,Math.min(a.y+ah,b.y+bh)-Math.max(a.y-ah,b.y-bh));
+  return ox*oy;
+}
+function netAreaMm2(r){
+  const gross=r.wMm*r.dMm;
+  if(!excls.length||!pxPerMm)return gross;
+  let ovPx=0;excls.forEach(e=>{ovPx+=overlapPx(r,e);});
+  return Math.max(0,gross-ovPx/(pxPerMm*pxPerMm));
+}
+function checkRoom(r){
+  const area=netAreaMm2(r)/1e6,mn=Math.min(r.wMm,r.dMm);
+  if(r.type==='main')return{ok:(r.wMm>=3000&&r.dMm>=3400)||(r.wMm>=3400&&r.dMm>=3000),area,mn,need:'Need 3.0x3.4 (either way), robe extra excluded'};
+  if(r.type==='other')return{ok:mn>=3000,area,mn,need:'Need min 3.0x3.0, robe extra excluded'};
+  if(r.type==='living')return{ok:mn>=3600&&area>=12,area,mn,need:'Need min width 3.6m + 12m2, kitchen excluded'};
+  return{ok:true,area,mn,need:''};
+}
+
+// ---------- draw ----------
+function draw(){
+  ctx.fillStyle='#333';ctx.fillRect(0,0,cv.width,cv.height);
+  if(bg){
+    ctx.save();
+    if(document.getElementById('contrast').checked)ctx.filter='grayscale(1) contrast(1.5) brightness(1.1)';
+    const w=bg.width*view.s,h=bg.height*view.s;
+    ctx.drawImage(bg,view.ox,view.oy,w,h);
+    ctx.restore();
+  }
+  ctx.fillStyle='yellow';
+  calibPts.forEach(p=>{ctx.beginPath();ctx.arc(view.ox+p.x*view.s,view.oy+p.y*view.s,6,0,7);ctx.fill();});
+  if(!document.getElementById('hideUnits').checked)units.forEach(u=>drawUnit(u));
+  if(traceMode&&traceMode.pts.length){
+    ctx.save();ctx.strokeStyle='#ff6d00';ctx.fillStyle='#ff6d00';ctx.lineWidth=2;
+    ctx.beginPath();traceMode.pts.forEach(([x,y],i)=>{const p=toScreen(x,y);i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});ctx.stroke();
+    traceMode.pts.forEach(([x,y])=>{const p=toScreen(x,y);ctx.fillRect(p.x-4,p.y-4,8,8);});
+    ctx.restore();
+  }
+  const hideX=document.getElementById('hideExcl').checked;
+  if(!hideX)excls.forEach(e=>drawExcl(e));
+  rooms.forEach(r=>drawRoom(r));
+  // handles
+  if(sel){drawHandles(sel.ref);}
+}
+function toScreen(x,y){return{x:view.ox+x*view.s,y:view.oy+y*view.s};}
+function drawRoom(r){
+  const c=checkRoom(r),p=toScreen(r.x,r.y),w=pxSizeW(r)*view.s,h=pxSizeH(r)*view.s;
+  const isSel=sel&&sel.kind==='room'&&sel.ref===r;
+  ctx.save();ctx.translate(p.x,p.y);ctx.rotate((r.rot||0)*Math.PI/180);
+  ctx.setLineDash([10,7]);ctx.lineWidth=isSel?3.5:2.5;
+  ctx.strokeStyle=c.ok?'#222222':'#d50000';
+  ctx.fillStyle=c.ok?'rgba(255,255,255,0.04)':'rgba(213,0,0,0.10)';
+  ctx.fillRect(-w/2,-h/2,w,h);ctx.strokeRect(-w/2,-h/2,w,h);
+  ctx.setLineDash([]);
+  if(document.getElementById('showIds').checked){
+    ctx.fillStyle=c.ok?'#111':'#d50000';ctx.textAlign='center';
+    ctx.font='bold 12px system-ui';
+    const nm=(r.label||r.type).toUpperCase();
+    ctx.fillText(nm,0,-h/2+16);
+    ctx.font='bold 12px system-ui';
+    ctx.fillText(Math.round(r.wMm)+' x '+Math.round(r.dMm)+'mm ('+(netAreaMm2(r)/1e6).toFixed(2)+'m2)',0,0);
+    ctx.font='11px system-ui';
+    ctx.fillText(c.ok?'✓ COMPLIANT':'✗ FAIL — '+c.need,0,16);
+  }
+  ctx.restore();
+}
+function drawUnit(u){
+  const isSel=sel&&sel.kind==='unit'&&sel.ref===u;
+  const active=u.id===activeUnitId;
+  const pts=unitPts(u).map(([x,y])=>toScreen(x,y));
+  ctx.save();
+  ctx.setLineDash([]);ctx.lineWidth=isSel?3.5:2.5;
+  ctx.strokeStyle=active?'#1976d2':'#64a1d8';
+  ctx.fillStyle=active?'rgba(25,118,210,0.06)':'rgba(25,118,210,0.03)';
+  ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.fill();ctx.stroke();
+  if(isSel&&u.poly){ // vertex dots + edge midpoints
+    ctx.fillStyle='#fff';ctx.strokeStyle='#0d47a1';
+    u.poly.forEach(([x,y])=>{const p=toScreen(x,y);ctx.fillRect(p.x-5,p.y-5,10,10);ctx.strokeRect(p.x-5,p.y-5,10,10);});
+    ctx.fillStyle='#0d47a1';
+    for(let i=0;i<u.poly.length;i++){const a=toScreen(...u.poly[i]),b=toScreen(...u.poly[(i+1)%u.poly.length]);ctx.beginPath();ctx.arc((a.x+b.x)/2,(a.y+b.y)/2,4,0,7);ctx.fill();}
+  }
+  const bb=unitBBox(u),tp=toScreen(bb.cx,bb.y0);
+  ctx.fillStyle=active?'#0d47a1':'#1976d2';ctx.textAlign='center';ctx.font='bold 13px system-ui';
+  ctx.fillText((u.label||'UNIT')+(active?' ● ACTIVE':'')+(u.poly?' ⬠':''),tp.x,tp.y+18);
+  ctx.restore();
+}
+function drawExcl(e){
+  const p=toScreen(e.x,e.y),w=pxSizeW(e)*view.s,h=pxSizeH(e)*view.s;
+  const isSel=sel&&sel.kind==='excl'&&sel.ref===e;
+  ctx.save();ctx.translate(p.x,p.y);ctx.rotate((e.rot||0)*Math.PI/180);
+  ctx.strokeStyle=isSel?'#ff0':'#8d4e2a';ctx.lineWidth=isSel?3:2.5;
+  ctx.strokeRect(-w/2,-h/2,w,h);
+  ctx.beginPath();ctx.moveTo(-w/2,-h/2);ctx.lineTo(w/2,h/2);ctx.moveTo(w/2,-h/2);ctx.lineTo(-w/2,h/2);ctx.stroke();
+  ctx.fillStyle='#8d4e2a';ctx.textAlign='center';ctx.font='bold 11px system-ui';
+  ctx.fillText((e.label||'EXCLUDE'),0,-4);
+  ctx.restore();
+}
+function drawHandles(b){
+  const p=toScreen(b.x,b.y),w=pxSizeW(b)*view.s/2,h=pxSizeH(b)*view.s/2;
+  const pts=[[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+  ctx.save();ctx.translate(p.x,p.y);ctx.rotate((b.rot||0)*Math.PI/180);
+  ctx.fillStyle='#fff';ctx.strokeStyle='#000';
+  pts.forEach(([ix,iy])=>{const x=ix*w,y=iy*h;ctx.fillRect(x-5,y-5,10,10);ctx.strokeRect(x-5,y-5,10,10);});
+  ctx.restore();
+  b._hPts=pts.map(([ix,iy])=>{
+    const rad=(b.rot||0)*Math.PI/180,lx=ix*w,ly=iy*h;
+    return{x:p.x+lx*Math.cos(rad)-ly*Math.sin(rad),y:p.y+lx*Math.sin(rad)+ly*Math.cos(rad),ix,iy};
+  });
+}
+
+// ---------- interaction: move + edge resize ----------
+function toImg(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left-view.ox)/view.s,y:(e.clientY-r.top-view.oy)/view.s};}
+function hitHandle(e){
+  if(!sel)return null;
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  for(const h of (sel.ref._hPts||[])){if(Math.abs(mx-h.x)<9&&Math.abs(my-h.y)<9)return h;}
+  return null;
+}
+let unitsLocked=false,traceMode=null; // traceMode={pts:[[x,y]]}
+function hitAll(p){
+  const useUnits=(!unitsLocked&&!document.getElementById('hideUnits').checked)?units.map(e=>({k:'unit',b:e})):[];
+  const all=[...useUnits,...excls.map(e=>({k:'excl',b:e})),...rooms.map(e=>({k:'room',b:e}))];
+  return all.filter(({k,b})=>{
+    if(k==='unit'&&b.poly&&b.poly.length>=3)return pip(b.poly,p.x,p.y);
+    const dx=p.x-b.x,dy=p.y-b.y,rad=-(b.rot||0)*Math.PI/180;
+    const lx=dx*Math.cos(rad)-dy*Math.sin(rad),ly=dx*Math.sin(rad)+dy*Math.cos(rad);
+    return Math.abs(lx)<pxSizeW(b)/2&&Math.abs(ly)<pxSizeH(b)/2;
+  });
+}
+function hitPolyHandle(e){ // vertices (move) + edge midpoints (insert) of selected poly unit, screen px
+  if(!sel||sel.kind!=='unit'||!sel.ref.poly)return null;
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  for(let i=0;i<sel.ref.poly.length;i++){const p=toScreen(...sel.ref.poly[i]);if(Math.abs(mx-p.x)<9&&Math.abs(my-p.y)<9)return{v:i,edge:-1};}
+  for(let i=0;i<sel.ref.poly.length;i++){const a=toScreen(...sel.ref.poly[i]),b=toScreen(...sel.ref.poly[(i+1)%sel.ref.poly.length]);if(Math.hypot(mx-(a.x+b.x)/2,my-(a.y+b.y)/2)<9)return{v:-1,edge:i};}
+  return null;
+}
+function hitTest(p){const h=hitAll(p);return h.length?h[h.length-1]:null;}
+let cycleIdx=0,lastClick={x:0,y:0,t:0};
+let drag=null,resizeH=null,pan=null,spaceDown=false;
+window.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){calibMode=false;document.getElementById('calibBar').style.display='none';if(traceMode){traceMode=null;draw();renderList();}}
+  if(e.key==='Enter'&&traceMode){finishTrace();}
+  if(e.code==='Space')spaceDown=true;
+});
+window.addEventListener('keyup',e=>{if(e.code==='Space')spaceDown=false;});
+cv.addEventListener('pointerdown',e=>{
+  cv.setPointerCapture(e.pointerId);
+  const p=toImg(e);
+  if(calibMode){calibPts.push(p);if(calibPts.length===2)document.getElementById('calibBar').textContent='Now enter real mm and press Set mm.';draw();return;}
+  if(e.button===1||e.button===2||spaceDown){pan={sx:e.clientX,sy:e.clientY,ox:view.ox,oy:view.oy};return;}
+  if(traceMode){ // click adds vertex; double-click / Enter finishes
+    if(e.detail>=2||traceMode.pts.length>=2&&Math.hypot(p.x-traceMode.pts[0][0],p.y-traceMode.pts[0][1])<14){finishTrace();return;}
+    traceMode.pts.push([Math.round(p.x),Math.round(p.y)]);drawTrace();return;
+  }
+  if(sel&&sel.kind==='unit'&&sel.ref.poly){
+    const ph=hitPolyHandle(e);
+    if(ph){
+      if(e.altKey&&ph.v>=0&&sel.ref.poly.length>3){sel.ref.poly.splice(ph.v,1);draw();renderList();return;} // alt-click deletes vertex
+      if(ph.edge>=0){sel.ref.poly.splice(ph.edge+1,0,[Math.round(p.x),Math.round(p.y)]);resizeH={polyV:ph.edge+1,b:sel.ref};return;}
+      resizeH={polyV:ph.v,b:sel.ref};return;
+    }
+  }
+  const h=hitHandle(e);
+  if(h&&sel){const s=pxPerMm||0.5;resizeH={h,b:sel.ref,s};return;}
+  const hits=hitAll(p);
+  if(hits.length){
+    const now=performance.now(),same=Math.hypot(p.x-lastClick.x,p.y-lastClick.y)<12&&(now-lastClick.t<600);
+    cycleIdx=same?(cycleIdx+1)%hits.length:0; // repeat-click cycles overlapping stack
+    lastClick={x:p.x,y:p.y,t:now};
+    const hit=hits[hits.length-1-cycleIdx]||hits[hits.length-1];
+    sel={kind:hit.k,ref:hit.b};if(hit.k==='unit')activeUnitId=hit.b.id;
+    drag=hit.b.poly?{b:hit.b,px:p.x,py:p.y}:{b:hit.b,dx:p.x-hit.b.x,dy:p.y-hit.b.y};draw();renderList();
+  }
+  else{sel=null;draw();renderList();}
+});
+cv.addEventListener('pointermove',e=>{
+  if(pan){view.ox=pan.ox+(e.clientX-pan.sx);view.oy=pan.oy+(e.clientY-pan.sy);draw();return;}
+  if(resizeH&&resizeH.polyV!=null){const p=toImg(e);resizeH.b.poly[resizeH.polyV]=[Math.round(p.x),Math.round(p.y)];draw();return;}
+  if(drag&&drag.b.poly){const p=toImg(e);const dx=p.x-drag.px,dy=p.y-drag.py;drag.b.poly=drag.b.poly.map(([x,y])=>[Math.round(x+dx),Math.round(y+dy)]);drag.px=p.x;drag.py=p.y;const bb=unitBBox(drag.b);drag.b.x=bb.cx;drag.b.y=bb.cy;draw();return;}
+  if(resizeH){
+    const{b,h,s}=resizeH,p=toImg(e);
+    const rad=-(b.rot||0)*Math.PI/180,dx=p.x-b.x,dy=p.y-b.y;
+    const lx=dx*Math.cos(rad)-dy*Math.sin(rad),ly=dx*Math.sin(rad)+dy*Math.cos(rad);
+    const curW=pxSizeW(b),curH=pxSizeH(b);
+    let nwPx=curW,nhPx=curH,ncx=b.x,ncy=b.y;
+    if(h.ix!==0){nwPx=Math.max(20,2*Math.abs(lx)*(h.ix>0?1:1));const sh=(nwPx-curW)/2;const c=Math.cos(-rad),si=Math.sin(-rad);
+      ncx=b.x+h.ix*sh*c;ncy=b.y+h.ix*sh*si;}
+    if(h.iy!==0){nhPx=Math.max(20,2*Math.abs(ly));const sh=(nhPx-curH)/2;const c=Math.cos(-rad),si=Math.sin(-rad);
+      // move centre along local y
+      const wx=-si*h.iy*sh,wy=c*h.iy*sh;ncx+= (h.ix!==0?0:wx);ncy+=(h.ix!==0?0:wy);
+      if(h.ix!==0){ncx+= -Math.sin(-rad)*h.iy*sh;ncy+=Math.cos(-rad)*h.iy*sh;}}
+    // snap to 10mm
+    const toMm=px=>px/s;
+    let wMm=toMm(nwPx),dMm=toMm(nhPx);
+    if(b.rot%180!==0){const t=wMm;wMm=dMm;dMm=t;}
+    wMm=Math.round(wMm/10)*10;dMm=Math.round(dMm/10)*10;
+    b.wMm=Math.max(200,wMm);b.dMm=Math.max(200,dMm);b.x=ncx;b.y=ncy;
+    draw();renderList();return;
+  }
+  if(drag){const p=toImg(e);drag.b.x=p.x-drag.dx;drag.b.y=p.y-drag.dy;draw();}
+});
+window.addEventListener('pointerup',()=>{drag=null;resizeH=null;pan=null;});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+function zoomAt(mx,my,f){const s0=view.s,s1=Math.min(20,Math.max(0.05,s0*f));const ix=(mx-view.ox)/s0,iy=(my-view.oy)/s0;view.s=s1;view.ox=mx-ix*s1;view.oy=my-iy*s1;draw();}
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect();zoomAt(e.clientX-r.left,e.clientY-r.top,e.deltaY<0?1.15:1/1.15);},{passive:false});
+
+// ---------- load / scale ----------
+document.getElementById('file').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;fileName=f.name;isPdf=/pdf/i.test(f.type)||/\.pdf$/i.test(f.name);
+  if(isPdf){const r=new FileReader();r.onload=()=>{fileBuf=r.result;renderPdf();};r.readAsArrayBuffer(f);}
+  else{fileBuf=null;const img=new Image();img.onload=()=>{bg=img;fitView();pxPerMm=null;updateScale();draw();};img.src=URL.createObjectURL(f);}
+};
+async function renderPdf(){
+  if(!fileBuf)return;
+  const pdf=await pdfjsLib.getDocument({data:fileBuf.slice(0)}).promise;
+  const n=Math.min(Math.max(1,+document.getElementById('pageno').value||4),pdf.numPages);
+  const page=await pdf.getPage(n);lastPage=page;
+  const vp=page.getViewport({scale:RENDER});
+  const tmp=document.createElement('canvas');tmp.width=vp.width;tmp.height=vp.height;
+  await page.render({canvasContext:tmp.getContext('2d'),viewport:vp}).promise;
+  try{const tc=await page.getTextContent();lastText=tc.items.map(i=>({s:i.str,x:i.transform[4],y:i.transform[5]}));}catch(_){lastText=[];}
+  const img=new Image();img.onload=()=>{bg=img;fitView();autoScaleFromFooter();};img.src=tmp.toDataURL();
+}
+document.getElementById('loadPdf').onclick=renderPdf;
+async function autoScaleFromFooter(){
+  try{
+    if(!lastPage||!bg)return;
+    const txt=lastText.map(i=>i.s).join(' ');
+    const m=txt.match(/1\s*:\s*(\d+)/);if(m)autoDenom=+m[1];
+    const vp1=lastPage.getViewport({scale:1});
+    const paperMmW=vp1.width*25.4/72,realMmW=paperMmW*autoDenom;
+    pxPerMm=bg.width/realMmW;
+    updateScale('Auto-scale: footer 1:'+autoDenom+' @A1 → '+pxPerMm.toFixed(4)+' px/mm. Verify on a known wall.');
+    draw();renderList();
+  }catch(err){updateScale('Auto-scale failed, use manual 2-click.');}
+}
+document.getElementById('autoScale').onclick=autoScaleFromFooter;
+document.getElementById('calibBtn').onclick=()=>{calibPts=[];calibMode=true;document.getElementById('calibBar').style.display='block';};
+document.getElementById('setscale').onclick=()=>{
+  if(calibPts.length<2){alert('Click 2 points first');return;}
+  const dx=calibPts[0].x-calibPts[1].x,dy=calibPts[0].y-calibPts[1].y;
+  const px=Math.hypot(dx,dy),mm=+document.getElementById('realmm').value;
+  if(!px||!mm)return;pxPerMm=px/mm;calibMode=false;
+  document.getElementById('calibBar').style.display='none';updateScale('Manual scale: '+pxPerMm.toFixed(4)+' px/mm');draw();renderList();
+};
+function updateScale(msg){
+  document.getElementById('scaleOut').innerHTML=pxPerMm?'<small class=ok>Scale: '+pxPerMm.toFixed(4)+' px/mm (1:'+autoDenom+'). '+ (msg||'') +'</small>':'<small class=warn>Scale: not set — load p.4 first</small>';
+}
+function fitView(){if(!bg)return;view.s=Math.min(cv.width/bg.width,cv.height/bg.height)*0.95;view.ox=20;view.oy=20;draw();}
+
+// ---------- units (one by one) + auto-measure inside active unit ----------
+function mkRoom(type,label,wMm,dMm,fx,fy){return{id:uid++,type,label,x:bg.width*fx,y:bg.height*fy,wMm,dMm,rot:0};}
+function mkExcl(label,wMm,dMm,fx,fy){return{id:uid++,label,x:bg.width*fx,y:bg.height*fy,wMm,dMm,rot:0};}
+function activeUnit(){return units.find(u=>u.id===activeUnitId)||units[0]||null;}
+document.getElementById('lockUnits').onclick=e=>{unitsLocked=!unitsLocked;e.target.textContent=unitsLocked?'🔓 Unlock blues':'🔒 Lock blues';};
+document.getElementById('hideUnits').onchange=draw;
+document.getElementById('addUnit').onclick=()=>{
+  if(!bg){alert('Load plan first');return;}
+  const s=pxPerMm||0.5,W=bg.width,H=bg.height;
+  const u={id:uid++,label:'UNIT '+String.fromCharCode(65+units.length),kind:'2bed',x:W*0.5,y:H*0.45,wMm:W*0.15/s,dMm:H*0.2/s,rot:0};
+  units.push(u);activeUnitId=u.id;sel={kind:'unit',ref:u};draw();renderList();
+};
+// ----- polygon trace -----
+document.getElementById('traceUnit').onclick=()=>{
+  if(!bg){alert('Load plan first');return;}
+  traceMode={pts:[]};
+  document.getElementById('autoMsg').innerHTML='<small>TRACE: click each wall corner along the unit outer face. Double-click (or press Enter) near the start to close. Esc cancels.</small>';
+};
+function drawTrace(){
+  draw();
+  if(!traceMode||!traceMode.pts.length)return;
+  ctx.save();ctx.strokeStyle='#ff6d00';ctx.fillStyle='#ff6d00';ctx.lineWidth=2;
+  ctx.beginPath();traceMode.pts.forEach(([x,y],i)=>{const p=toScreen(x,y);i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});ctx.stroke();
+  traceMode.pts.forEach(([x,y])=>{const p=toScreen(x,y);ctx.fillRect(p.x-4,p.y-4,8,8);});
+  ctx.restore();
+}
+function finishTrace(){
+  const pts=traceMode?traceMode.pts:[];
+  traceMode=null;
+  if(pts.length>=3){
+    const s=pxPerMm||0.5,bb={x0:1e18,y0:1e18,x1:-1e18,y1:-1e18};
+    pts.forEach(([x,y])=>{bb.x0=Math.min(bb.x0,x);bb.y0=Math.min(bb.y0,y);bb.x1=Math.max(bb.x1,x);bb.y1=Math.max(bb.y1,y);});
+    const u={id:uid++,label:'UNIT '+String.fromCharCode(65+units.length),kind:'2bed',
+      x:(bb.x0+bb.x1)/2,y:(bb.y0+bb.y1)/2,wMm:(bb.x1-bb.x0)/s,dMm:(bb.y1-bb.y0)/s,rot:0,poly:pts};
+    units.push(u);activeUnitId=u.id;sel={kind:'unit',ref:u};
+    document.getElementById('autoMsg').innerHTML='<small>Polygon unit saved ('+pts.length+' corners). Drag dots to adjust, 🧲 Snap pulls it to walls.</small>';
+  }
+  draw();renderList();
+}
+document.getElementById('rectToPoly').onclick=()=>{
+  const u=sel&&sel.kind==='unit'?sel.ref:activeUnit();
+  if(!u){alert('Select a unit first');return;}
+  rectToPoly(u);draw();renderList();
+  document.getElementById('autoMsg').innerHTML='<small>'+(u.label||'Unit')+' is now a polygon — drag dots, click edge dots to add corners, Alt+click a dot to delete.</small>';
+};
+// ----- wall snap: pull each poly vertex to nearest thick dark wall pixel -----
+let wallCache=null;
+function wallMask(region){
+  // downsampled dark-pixel grid over region bbox; returns {grid,gw,gh,x0,y0,cell}
+  const pad=60,x0=Math.max(0,region.x0-pad),y0=Math.max(0,region.y0-pad);
+  const x1=Math.min(bg.width,region.x1+pad),y1=Math.min(bg.height,region.y1+pad);
+  const off=document.createElement('canvas');off.width=Math.ceil(x1-x0);off.height=Math.ceil(y1-y0);
+  if(off.width<8||off.height<8)return null;
+  const c=off.getContext('2d',{willReadFrequently:true});c.drawImage(bg,x0,y0,off.width,off.height,0,0,off.width,off.height);
+  const d=c.getImageData(0,0,off.width,off.height).data,cell=2;
+  const gw=Math.ceil(off.width/cell),gh=Math.ceil(off.height/cell),grid=new Uint8Array(gw*gh);
+  for(let gy=0;gy<gh;gy++)for(let gx=0;gx<gw;gx++){
+    let dark=0,n=0;
+    for(let y=gy*cell;y<Math.min((gy+1)*cell,off.height);y++)for(let x=gx*cell;x<Math.min((gx+1)*cell,off.width);x++){
+      const i=(y*off.width+x)*4;if(d[i]<70&&d[i+1]<70&&d[i+2]<70)dark++;n++;
+    }
+    grid[gy*gw+gx]=dark/n>0.25?1:0;
+  }
+  return{grid,gw,gh,x0,y0,cell};
+}
+function snapPt(mask,x,y){
+  // search radius ~12mm for dark runs; prefer thick (3x3 filled) over thin single lines
+  const s=pxPerMm||0.5,R=Math.max(6,(12*s)/mask.cell);
+  const gx0=(x-mask.x0)/mask.cell,gy0=(y-mask.y0)/mask.cell;
+  let best=null,bestScore=-1;
+  for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
+    const gx=Math.round(gx0+dx),gy=Math.round(gy0+dy);
+    if(gx<1||gy<1||gx>=mask.gw-1||gy>=mask.gh-1)continue;
+    if(!mask.grid[gy*mask.gw+gx])continue;
+    let thick=0;for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++)thick+=mask.grid[(gy+oy)*mask.gw+gx+ox];
+    const dist=Math.hypot(dx,dy),score=thick*10-dist; // thick walls win over thin lines
+    if(score>bestScore){bestScore=score;best={x:mask.x0+gx*mask.cell,y:mask.y0+gy*mask.cell};}
+  }
+  return best;
+}
+document.getElementById('snapWalls').onclick=()=>{
+  const u=sel&&sel.kind==='unit'?sel.ref:activeUnit();
+  if(!u||!bg){alert('Select a unit first');return;}
+  if(!u.poly)rectToPoly(u);
+  // densify long edges so stepped walls (stair voids, balconies) get picked up
+  const dense=[],s=pxPerMm||0.5,step=25*s;
+  for(let i=0;i<u.poly.length;i++){
+    const a=u.poly[i],b=u.poly[(i+1)%u.poly.length],len=Math.hypot(b[0]-a[0],b[1]-a[1]),n=Math.max(1,Math.round(len/step));
+    for(let k=0;k<n;k++)dense.push([a[0]+(b[0]-a[0])*k/n,a[1]+(b[1]-a[1])*k/n]);
+  }
+  const bb=unitBBox(u),mask=wallMask({x0:bb.x0,y0:bb.y0,x1:bb.x1,y1:bb.y1});
+  if(!mask){alert('Could not read plan pixels');return;}
+  let moved=0;
+  const out=dense.map(([x,y])=>{const q=snapPt(mask,x,y);if(q&&Math.hypot(q.x-x,q.y-y)>2){moved++;return[Math.round(q.x),Math.round(q.y)];}return[Math.round(x),Math.round(q?q.y:y)];});
+  // decimate colinear runs back to corners
+  const simp=[out[0]];
+  for(let i=1;i<out.length;i++){
+    const a=simp[simp.length-1],b=out[i],c=out[(i+1)%out.length];
+    const v1=[b[0]-a[0],b[1]-a[1]],v2=[c[0]-b[0],c[1]-b[1]];
+    const cross=Math.abs(v1[0]*v2[1]-v1[1]*v2[0]),l1=Math.hypot(...v1)||1;
+    if(cross/l1>3*simp.length*0+s*2)simp.push(b); // corner kept; straight runs collapse
+  }
+  u.poly=simp.length>=3?simp:dense.filter((_,i)=>i%3===0);
+  const nbb=unitBBox(u);u.x=nbb.cx;u.y=nbb.cy;
+  document.getElementById('autoMsg').innerHTML='<small>Snap moved '+moved+'/'+dense.length+' edge points to thick walls. Blue dots that missed (terrace/stair voids) — drag by hand.</small>';
+  draw();renderList();
+};
+// ----- bedrooms-only flow -----
+document.getElementById('bedOnly').onclick=()=>{
+  const U=activeUnit();
+  if(!U||!bg){alert('Select a unit first');return;}
+  if(!pxPerMm){alert('Scale not set');return;}
+  const bb=unitBBox(U),uw=bb.w,uh=bb.h,s=pxPerMm;
+  const beds=U.kind==='3bed'?3:U.kind==='1bed'?1:2;
+  rooms=rooms.filter(r=>!pip(unitPts(U),r.x,r.y)); // clear rooms inside this unit only
+  excls=excls.filter(e=>!pip(unitPts(U),e.x,e.y));
+  const R=(type,label,wf,hf,ox,oy)=>({id:uid++,type,label,x:bb.cx+ox*uw,y:bb.cy+oy*uh,wMm:uw*wf/s,dMm:uh*hf/s,rot:0});
+  const E=(label,wf,hf,ox,oy)=>({id:uid++,label,x:bb.cx+ox*uw,y:bb.cy+oy*uh,wMm:uw*wf/s,dMm:uh*hf/s,rot:0});
+  if(beds===1){rooms.push(R('main','BEDROOM 1',0.40,0.42,0.05,0.20));excls.push(E('ROBE (excluded)',0.10,0.32,-0.12,0.20));}
+  if(beds===2){rooms.push(R('main','BEDROOM 1',0.32,0.40,-0.20,0.22));rooms.push(R('other','BEDROOM 2',0.30,0.40,0.18,0.22));excls.push(E('ROBE (excluded)',0.08,0.30,-0.04,0.22));}
+  if(beds===3){rooms.push(R('main','BEDROOM 1',0.26,0.40,-0.30,0.22));rooms.push(R('other','BEDROOM 2',0.25,0.40,0.0,0.22));rooms.push(R('other','BEDROOM 3',0.25,0.40,0.30,0.22));excls.push(E('ROBE (excluded)',0.06,0.30,-0.15,0.22));excls.push(E('ROBE (excluded)',0.06,0.30,0.15,0.22));}
+  biggestIsMain();
+  sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
+  document.getElementById('autoMsg').innerHTML='<small>Placed '+beds+' bedroom boxes in the active polygon (no living). Biggest auto-tagged MAIN — drag edges to wall faces.</small>';
+  draw();renderList();
+};
+function biggestIsMain(){
+  const U=activeUnit();if(!U)return;
+  const inside=rooms.filter(r=>pip(unitPts(U),r.x,r.y)&&r.type!=='living');
+  if(inside.length<2)return;
+  inside.sort((a,b)=>b.wMm*b.dMm-a.wMm*a.dMm);
+  inside.forEach((r,i)=>r.type=i===0?'main':'other');
+}
+document.getElementById('findUnits').onclick=()=>{
+  if(!bg){alert('Load p.4 first');return;}
+  const s=pxPerMm||0.5;
+  sel=null;
+  // 6 units: top row = 3 double-storey (living level only, short), bottom row = 3 single-storey (tall).
+  // Tuned from your JSON: top y~0.27 h~0.10, bottom y~0.55 h~0.215, x spread 0.36/0.47/0.585 area.
+  const W=bg.width,H=bg.height;
+  const defs=[ // fractions measured from your fitted A–F JSON (2x2 small top + 2 big bottom)
+    {label:'UNIT A (top-left)', kind:'DS-living', fx:0.377,fy:0.270,wf:0.125,hf:0.100},
+    {label:'UNIT B (top-mid)', kind:'DS-living', fx:0.614,fy:0.272,wf:0.119,hf:0.100},
+    {label:'UNIT C (under A)', kind:'1bed', fx:0.375,fy:0.369,wf:0.120,hf:0.096},
+    {label:'UNIT D (under B)', kind:'DS-living', fx:0.613,fy:0.369,wf:0.119,hf:0.094},
+    {label:'UNIT E (bot-mid)', kind:'3bed', fx:0.418,fy:0.539,wf:0.185,hf:0.190},
+    {label:'UNIT F (bot-right)', kind:'3bed', fx:0.576,fy:0.524,wf:0.132,hf:0.165},
+  ];
+  units=defs.map(d=>({id:uid++,label:d.label,kind:d.kind,x:W*d.fx,y:H*d.fy,wMm:W*d.wf/s,dMm:H*d.hf/s,rot:0}));
+  activeUnitId=units[0].id;sel={kind:'unit',ref:units[0]};
+  document.getElementById('autoMsg').innerHTML='<small>Guessed 6 blue unit boxes (top = double-storey living-only, bottom = full units). Drag blue edges to fit, set each unit\'s kind (DS/1/2/3 bed), then press 2 inside the active one. 🔒 Lock blues when done so rooms select easily.</small>';
+  view.s=Math.min(cv.width/(units[0].wMm*s*2.2),cv.height/(units[0].dMm*s*2.2));
+  view.ox=cv.width/2-units[0].x*view.s;view.oy=cv.height/2-units[0].y*view.s;
+  draw();renderList();
+};
+function cycleUnit(d){
+  if(!units.length)return;
+  const i=units.findIndex(u=>u.id===activeUnitId);
+  const n=units[(i+d+units.length)%units.length];
+  activeUnitId=n.id;sel={kind:'unit',ref:n};draw();renderList();
+}
+document.getElementById('prevUnit').onclick=()=>cycleUnit(-1);
+document.getElementById('nextUnit').onclick=()=>cycleUnit(1);
+document.getElementById('autoBtn').onclick=()=>{
+  if(!bg){alert('Load p.4 first');return;}
+  if(!pxPerMm){alert('Scale not set — render PDF first (auto-scale) or do 2-click calibration.');return;}
+  const U=activeUnit();
+  const place=(type,label,wPx,hPx,oxFrac,oyFrac)=>{
+    const s=pxPerMm;
+    return{id:uid++,type,label,x:U?U.x+oxFrac*pxSizeW(U):bg.width*0.5,wMm:wPx/s,dMm:hPx/s,rot:0,
+      ...(U?{x:U.x+oxFrac*pxSizeW(U),y:U.y+oyFrac*pxSizeH(U)}:{x:bg.width*0.5,y:bg.height*0.5})};
+  };
+  rooms=[];excls=[];sel=null;
+  if(U){
+    const uw=pxSizeW(U),uh=pxSizeH(U),s=pxPerMm;
+    const R=(type,label,wf,hf,ox,oy)=>({id:uid++,type,label,x:U.x+ox*uw,y:U.y+oy*uh,wMm:uw*wf/s,dMm:uh*hf/s,rot:0});
+    const E=(label,wf,hf,ox,oy)=>({id:uid++,label,x:U.x+ox*uw,y:U.y+oy*uh,wMm:uw*wf/s,dMm:uh*hf/s,rot:0});
+    const kind=U.kind||'2bed';
+    if(kind.startsWith('DS')){
+      rooms.push(R('living','LIVING ROOM',0.92,0.62,0.0,-0.10));
+      excls.push(E('KITCHEN (excluded)',0.92,0.14,0.0,-0.34));
+    }else{
+      const beds=kind==='3bed'?3:kind==='1bed'?1:2;
+      rooms.push(R('living','LIVING ROOM',0.92,0.40,0.02,-0.26));
+      excls.push(E('KITCHEN (excluded)',0.92,0.10,0.02,-0.41));
+      if(beds===1){rooms.push(R('main','BEDROOM 1',0.60,0.38,0.0,0.26));excls.push(E('ROBE (excluded)',0.10,0.30,-0.15,0.26));}
+      if(beds===2){rooms.push(R('main','BEDROOM 1',0.44,0.38,-0.24,0.26));rooms.push(R('other','BEDROOM 2',0.44,0.38,0.24,0.26));excls.push(E('ROBE (excluded)',0.09,0.30,-0.06,0.26));excls.push(E('ROBE (excluded)',0.08,0.28,0.12,0.27));}
+      if(beds===3){rooms.push(R('main','BEDROOM 1',0.30,0.38,-0.32,0.26));rooms.push(R('other','BEDROOM 2',0.30,0.38,0.0,0.26));rooms.push(R('other','BEDROOM 3',0.30,0.38,0.32,0.26));excls.push(E('ROBE (excluded)',0.07,0.30,-0.18,0.26));excls.push(E('ROBE (excluded)',0.07,0.30,0.12,0.26));}
+    }
+  }else{
+    rooms.push(mkRoom('living','LIVING ROOM',5600,3600,0.585,0.40));
+    rooms.push(mkRoom('main','BEDROOM 1',3600,3400,0.50,0.66));
+    rooms.push(mkRoom('other','BEDROOM 2',3400,3200,0.67,0.66));
+    excls.push(mkExcl('KITCHEN (excluded)',5600,900,0.585,0.32));
+    excls.push(mkExcl('ROBE (excluded)',700,1800,0.55,0.66));
+    excls.push(mkExcl('ROBE (excluded)',600,1700,0.62,0.66));
+  }
+  autoCategorise();
+  sel={kind:'room',ref:rooms[0]};
+  draw();renderList();
+};
+function autoCategorise(){
+  // heuristic: use PDF text labels if present, else keep template (largest BED=main)
+  const txt=lastText.map(t=>t.s).join(' ').toUpperCase();
+  let msg='Auto-placed 3 rooms + 3 exclusions. ';
+  if(/LIVING/.test(txt)||/BED/.test(txt)){msg+='PDF labels detected ('+lastText.filter(t=>/LIVING|BED|KITCHEN|ROBE|WIR/i.test(t.s)).slice(0,4).map(t=>t.s).join(', ')+') — types kept, drag edges to snap.';}
+  else{msg+='No readable room labels — types assigned by layout (top=living, bottom-left=main). Correct via dropdown if wrong.';}
+  document.getElementById('autoMsg').innerHTML='<small>'+msg+'</small>';
+}
+
+// ---------- side list ----------
+function renderList(){
+  const el=document.getElementById('rooms');el.innerHTML='';
+  const uc=document.createElement('div');uc.className='card';
+  uc.innerHTML='<b>Units ('+units.length+')</b> <small>blue = unit extents. Active unit gets measured. Click Select, drag blue edges to fit.</small>';
+  units.forEach((u,i)=>{
+    const r=document.createElement('div');r.className='row';
+    const nm=document.createElement('input');nm.value=u.label;nm.oninput=()=>{u.label=nm.value;draw();};
+    const k=document.createElement('select');
+    [['DS-living','DS living-only'],['1bed','1 bed'],['2bed','2 bed'],['3bed','3 bed']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;if((u.kind||'2bed')===v)o.selected=true;k.appendChild(o);});
+    k.onchange=()=>{u.kind=k.value;renderList();};
+    const b=document.createElement('button');b.textContent=u.id===activeUnitId?'● Active':'Select';b.onclick=()=>{activeUnitId=u.id;sel={kind:'unit',ref:u};draw();renderList();};
+    const del=document.createElement('button');del.textContent='Del';del.onclick=()=>{units=units.filter(y=>y!==u);draw();renderList();};
+    r.appendChild(nm);r.appendChild(k);r.appendChild(b);r.appendChild(del);uc.appendChild(r);
+  });
+  el.appendChild(uc);
+  const bc=document.createElement('div');bc.className='row';
+  const bm=document.createElement('button');bm.textContent='Biggest bedroom = MAIN';bm.onclick=()=>{biggestIsMain();draw();renderList();};
+  const bl=document.createElement('button');bl.textContent='🛏 Bedrooms only (active poly)';bl.onclick=()=>document.getElementById('bedOnly').click();
+  bc.appendChild(bm);bc.appendChild(bl);el.appendChild(bc);
+  rooms.forEach((r,i)=>{
+    const c=checkRoom(r);
+    const d=document.createElement('div');d.className='roomrow';
+    d.innerHTML='<b>'+(i+1)+'. '+(r.label||r.type)+'</b> <span class="'+(c.ok?'ok':'warn')+'">'+(c.ok?'✓ COMPLIANT':'✗ FAIL')+'</span><br><small>'+Math.round(r.wMm)+' x '+Math.round(r.dMm)+'mm = '+(netAreaMm2(r)/1e6).toFixed(2)+'m² net ('+c.need+')</small>';
+    const row=document.createElement('div');row.className='row';
+    const selEl=document.createElement('select');
+    ['living','main','other'].forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t+(t==='living'?' (3.6m+12m2)':t==='main'?' (3.0x3.4)':' (3.0x3.0)');if(r.type===t)o.selected=true;selEl.appendChild(o);});
+    selEl.onchange=()=>{r.type=selEl.value;draw();renderList();};
+    const nm=document.createElement('input');nm.value=r.label;nm.oninput=()=>{r.label=nm.value;draw();};
+    const del=document.createElement('button');del.textContent='Del';del.onclick=()=>{rooms=rooms.filter(x=>x!==r);if(sel&&sel.ref===r)sel=null;draw();renderList();};
+    const foc=document.createElement('button');foc.textContent='Select';foc.onclick=()=>{sel={kind:'room',ref:r};draw();renderList();};
+    row.appendChild(selEl);row.appendChild(foc);row.appendChild(del);
+    d.appendChild(nm);d.appendChild(row);el.appendChild(d);
+  });
+  const ex=document.createElement('div');ex.className='card';
+  ex.innerHTML='<b>Exclusions ('+excls.length+')</b> <small>brown X — working only, hidden toggle above, never exported. Net area = room minus overlap.</small>';
+  excls.forEach((x,i)=>{
+    const r=document.createElement('div');r.className='row';
+    const nm=document.createElement('input');nm.value=x.label;nm.oninput=()=>{x.label=nm.value;draw();};
+    const b=document.createElement('button');b.textContent='Select';b.onclick=()=>{sel={kind:'excl',ref:x};draw();};
+    const del=document.createElement('button');del.textContent='Del';del.onclick=()=>{excls=excls.filter(y=>y!==x);draw();renderList();};
+    r.appendChild(nm);r.appendChild(b);r.appendChild(del);ex.appendChild(r);
+  });
+  el.appendChild(ex);
+  const c=sel&&sel.kind==='room'?checkRoom(sel.ref):null;
+  document.getElementById('info').innerHTML=sel?'<small><b>'+(sel.ref.label||sel.kind)+'</b> '+Math.round(sel.ref.wMm)+' x '+Math.round(sel.ref.dMm)+'mm = '+(sel.kind==='room'?(netAreaMm2(sel.ref)/1e6).toFixed(2)+'m² net':'exclusion')+(c?' '+(c.ok?'<span class=ok>✓</span>':'<span class=warn>✗ '+c.need+'</span>'):'')+'</small>':'<small>No selection. Click a box, drag handles to snap to walls.</small>';
+}
+document.getElementById('addRoom').onclick=()=>{
+  if(!bg){alert('Load plan first');return;}
+  const s=pxPerMm||0.5,r={id:uid++,type:'other',label:'BEDROOM',x:bg.width/2,y:bg.height/2,wMm:3200,dMm:3000,rot:0};
+  rooms.push(r);sel={kind:'room',ref:r};draw();renderList();
+};
+document.getElementById('addExcl').onclick=()=>{
+  if(!bg){alert('Load plan first');return;}
+  const e={id:uid++,label:'EXCLUDE',x:bg.width/2,y:bg.height/2,wMm:1200,dMm:900,rot:0};
+  excls.push(e);sel={kind:'excl',ref:e};draw();renderList();
+};
+document.getElementById('hideExcl').onchange=draw;
+document.getElementById('contrast').onchange=draw;
+document.getElementById('showIds').onchange=draw;
+document.getElementById('rot90')?.remove;
+function storeKey(){return 'bads2-'+(document.getElementById('unit').value||'unit');}
+function clean(o){const c={...o};delete c._hPts;return c;}
+function snapshot(){return{unit:document.getElementById('unit').value,denom:autoDenom,pxPerMm,rooms:rooms.map(clean),excls:excls.map(clean),units:units.map(clean),activeUnitId};}
+document.getElementById('save').onclick=()=>{localStorage.setItem(storeKey(),JSON.stringify(snapshot()));alert('Saved '+units.length+' units + '+rooms.length+' rooms');};
+document.getElementById('load').onclick=()=>{const s=localStorage.getItem(storeKey());if(!s){alert('No save');return;}const o=JSON.parse(s);rooms=o.rooms||[];excls=o.excls||[];units=o.units||[];units.forEach(u=>{if(!u.kind)u.kind=/top|DS/i.test(u.label||'')?'DS-living':'2bed';});activeUnitId=o.activeUnitId||(units[0]&&units[0].id);if(o.pxPerMm)pxPerMm=o.pxPerMm;if(o.denom)autoDenom=o.denom;updateScale();sel=rooms[0]?{kind:'room',ref:rooms[0]}:null;draw();renderList();};
+document.getElementById('expJson').onclick=()=>{const a=document.createElement('a');a.download=storeKey()+'.json';a.href=URL.createObjectURL(new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'}));a.click();};
+document.getElementById('impJson').onclick=()=>document.getElementById('jsonFile').click();
+document.getElementById('jsonFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const o=JSON.parse(r.result);rooms=o.rooms||o.boxes||[];excls=o.excls||[];units=o.units||[];units.forEach(u=>{if(!u.kind)u.kind=/top|DS/i.test(u.label||'')?'DS-living':'2bed';});activeUnitId=o.activeUnitId||(units[0]&&units[0].id);if(o.pxPerMm)pxPerMm=o.pxPerMm;updateScale();draw();renderList();};r.readAsText(f);};
+document.getElementById('zin').onclick=()=>zoomAt(cv.width/2,cv.height/2,1.25);
+document.getElementById('zout').onclick=()=>zoomAt(cv.width/2,cv.height/2,1/1.25);
+document.getElementById('reset').onclick=fitView;
+document.getElementById('clear').onclick=()=>{rooms=[];excls=[];units=[];activeUnitId=null;sel=null;draw();renderList();};
+document.getElementById('exportPng').onclick=()=>{const a=document.createElement('a');a.download='bads-stage2.png';a.href=cv.toDataURL();a.click();};
+
+// ---------- vector PDF export (original vectors kept, boxes only addition) ----------
+document.getElementById('exportPdf').onclick=async()=>{
+  if(!isPdf||!fileBuf){alert('Load the original PDF first (PNG cannot keep vectors).');return;}
+  if(!rooms.length){alert('Nothing to export — run Auto-measure first.');return;}
+  try{
+    const {PDFDocument,rgb}=PDFLib;
+    const doc=await PDFDocument.load(fileBuf.slice(0));
+    const n=Math.min(Math.max(1,+document.getElementById('pageno').value||4),doc.getPageCount());
+    const page=doc.getPage(n-1);
+    const {width:PW,height:PH}=page.getSize();
+    const ptPerMm=72/(25.4*autoDenom); // real mm -> paper points at 1:denom
+    const imgW=bg.width,imgH=bg.height;
+    rooms.forEach(r=>{
+      const c=checkRoom(r);
+      const wPt=r.wMm*ptPerMm,hPt=r.dMm*ptPerMm;
+      // image px -> pdf points (y flipped)
+      const cx=r.x/imgW*PW, cyTop=r.y/imgH*PH;
+      const col=c.ok?rgb(0.13,0.13,0.13):rgb(0.84,0,0);
+      page.drawRectangle({
+        x:cx-((r.rot%180===0)?wPt:hPt)/2, y:(PH-cyTop)-((r.rot%180===0)?hPt:wPt)/2,
+        width:(r.rot%180===0)?wPt:hPt, height:(r.rot%180===0)?hPt:wPt,
+        borderColor:col, borderWidth:c.ok?1.2:2,
+        borderDashArray:c.ok?[6,4]:[6,4],
+        opacity:1, borderOpacity:1
+      });
+      const label=(r.label||r.type).toUpperCase()+'  '+Math.round(r.wMm)+'x'+Math.round(r.dMm)+'  '+(netAreaMm2(r)/1e6).toFixed(2)+'m2 '+(c.ok?'': 'FAIL');
+      page.drawText(label,{x:cx-wPt/2+4,y:(PH-cyTop)+4,size:7,color:col});
+    });
+    // NOTE: excls intentionally never drawn. Active polygon unit exported as thin blue outline.
+    const AU=units.find(u=>u.id===activeUnitId);
+    if(AU&&AU.poly&&AU.poly.length>=3){
+      const toPdf=([x,y])=>({x:x/imgW*PW,y:PH-y/imgH*PH});
+      for(let i=0;i<AU.poly.length;i++){
+        const a=toPdf(AU.poly[i]),b=toPdf(AU.poly[(i+1)%AU.poly.length]);
+        page.drawLine({start:a,end:b,thickness:1,color:rgb(0.10,0.46,0.82)});
+      }
+    }
+    const bytes=await doc.save();
+    const blob=new Blob([bytes],{type:'application/pdf'});
+    const a=document.createElement('a');a.download=(document.getElementById('unit').value||'unit')+'-BADS.pdf';a.href=URL.createObjectURL(blob);a.click();
+  }catch(err){alert('PDF export failed: '+err.message);}
+};
+
+function size(){cv.width=document.getElementById('wrap').clientWidth;cv.height=window.innerHeight;draw();}
+window.onresize=size;size();draw();renderList();updateScale();
+</script>
+</body>
+</html>
