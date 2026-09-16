@@ -737,14 +737,17 @@ function renderList(){
   document.getElementById('info').innerHTML=sel?'<small><b>'+(sel.ref.label||sel.kind)+'</b> '+Math.round(sel.ref.wMm)+' x '+Math.round(sel.ref.dMm)+'mm = '+(sel.kind==='room'?(netAreaMm2(sel.ref)/1e6).toFixed(2)+'m² net':'robe exclusion')+(c?' '+(c.ok?'<span class=ok>✓</span>':'<span class=warn>✗ '+c.need+'</span>'):'')+'</small>':'<small>No selection. Click a box, drag handles to snap to walls.</small>';
 }
 document.getElementById('seedBtn').onclick=e=>{seedMode=true;e.target.textContent='● Click inside a bedroom… (Esc cancels)';};
-function seedBed(p){
+async function seedBed(p){
   seedMode=false;document.getElementById('seedBtn').textContent='⊕ Click bedroom…';
   if(!bg||!pxPerMm){alert('Load a PDF first');return;}
+  const key=fileName+'|'+document.getElementById('pageno').value;
+  if(!window.lastVec||window.lastVecKey!==key){await runVecV2(document.getElementById('vecOut'));}
   const r={id:uid++,type:'other',label:'BEDROOM',x:p.x,y:p.y,wMm:3200,dMm:3200,rot:0};
   rooms.push(r);
   const ok=window.lastVec&&window.lastVec.planesH?fitRoom(r):false;
   sel={kind:'room',ref:r};draw();renderList();
-  document.getElementById('autoMsg').innerHTML='<small>Seeded at click'+(ok?' — fitted to inner wall faces.':' — no wall planes (inspect first?), drag edges.')+'</small>';
+  const d=r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):'';
+  document.getElementById('autoMsg').innerHTML='<small>Seeded at click'+(ok?' — fitted to inner wall faces.':' — fit failed, drag edges.')+d+'</small>';
 }
 document.getElementById('addRoom').onclick=()=>{
   if(!bg){alert('Load plan first');return;}
