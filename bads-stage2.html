@@ -51,7 +51,7 @@
     <button id="addRoom">+ Bedroom</button>
     <button id="addExcl">+ Robe (X)</button>
   </div>
-  <label><input type="checkbox" id="showVec" style="width:auto"> Show detection overlay (beds green, bed-band yellow, wall planes blue)</label><br>
+  <label><input type="checkbox" id="showVec" style="width:auto"> Show evidence overlay (fills red, heavy strokes orange, planes blue, beds green)</label><br>
   <label><input type="checkbox" id="hideExcl" style="width:auto"> Hide robe exclusions (also never exported)</label><br>
   <label><input type="checkbox" id="contrast" style="width:auto"> Wall contrast boost</label><br>
   <label><input type="checkbox" id="showIds" checked style="width:auto"> Show dimensions</label>
@@ -572,7 +572,7 @@ async function runVecV2(out){
   const nearBand=dedup.filter(r=>{const l=Math.max(r.w,r.h);return l>=1500&&l<=2300;});
   const gapHist={};
   [...pH.gaps,...pV.gaps].forEach(g=>{const b=Math.floor(g/20)*20,k=b+'–'+(b+20);gapHist[k]=(gapHist[k]||0)+1;});
-  window.lastVec={mmPerPt,segments:strokes.length,cuN,rects,fills,beds,dedup,nearBand,asmCount:asm.length,cornerN,corners:window.__corners||[],pH,pV,planesH,planesV};
+  window.lastVec={mmPerPt,segments:strokes.length,strokes,cuN,rects,fills,beds,dedup,nearBand,asmCount:asm.length,cornerN,corners:window.__corners||[],pH,pV,planesH,planesV};
   window.lastVecKey=fileName+'|'+document.getElementById('pageno').value;
   const topW=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([w,n])=>w+'pt×'+n).join(', ')||'—';
   let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V, '+cuN+' curve-out) · '+rects.length+' rects · '+cornerN+' corners · '+fills.length+' fills<br>';
@@ -616,6 +616,8 @@ function drawVec(){
   const ptW=bg.width/RENDER,ptH=bg.height/RENDER;
   const IX=pt=>view.ox+pt/ptW*bg.width*view.s, IY=pt=>view.oy+(ptH-pt)/ptH*bg.height*view.s;
   ctx.save();ctx.lineWidth=2;
+  (LV.fills||[]).forEach(f=>{const dark=f.c&&Math.max(f.c[0],f.c[1],f.c[2])<=90;ctx.strokeStyle=dark?'rgba(255,0,0,0.75)':'rgba(255,150,150,0.5)';ctx.strokeRect(IX(f.x0),IY(f.y1),IX(f.x1)-IX(f.x0),IY(f.y0)-IY(f.y1));});
+  (LV.strokes||[]).forEach(s=>{if(s.cu||!s.c||Math.max(s.c[0],s.c[1],s.c[2])>90||s.w<0.6)return;ctx.strokeStyle='rgba(255,140,0,0.8)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(IX(s.x1),IY(s.y1));ctx.lineTo(IX(s.x2),IY(s.y2));ctx.stroke();ctx.lineWidth=2;});
   (LV.planesH||[]).forEach(p=>{if(p.sup<1000)return;ctx.strokeStyle='rgba(25,118,210,0.85)';ctx.beginPath();ctx.moveTo(IX(p.a0),IY(p.c));ctx.lineTo(IX(p.a1),IY(p.c));ctx.stroke();});
   (LV.planesV||[]).forEach(p=>{if(p.sup<1000)return;ctx.strokeStyle='rgba(25,118,210,0.85)';ctx.beginPath();ctx.moveTo(IX(p.c),IY(p.a0));ctx.lineTo(IX(p.c),IY(p.a1));ctx.stroke();});
   const box=(r,col)=>{ctx.strokeStyle=col;ctx.strokeRect(IX(r.x0),IY(r.y1),IX(r.x1)-IX(r.x0),IY(r.y0)-IY(r.y1));};
