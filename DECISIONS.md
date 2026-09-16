@@ -167,6 +167,16 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
   Fix: merge colinear runs across <100mm gaps before cornering (10mm bins).
 - Corners plotted magenta (capped 3000) — next screenshot shows whether the bedroom rings.
 
+## 2026-09-16 — v5: click-seed + local plane support (built, pushed)
+
+- Furniture-corner chasing stalled (bed lines will not meet). Unblocked differently: one click
+  in the bedroom seeds a box, fitRoom grows it to inner faces. Auto bed-seed stays where it
+  works (FH queens); A01 gets one click instead of dragging four edges.
+- Planes now score by member length within 3m of the seed (≥500mm) — distant colinear lines
+  no longer hijack fits (the 7m-box class).
+- Meta: brace-check false alarm — a `don't` in a comment broke the naive quote-stripper.
+  Avoid apostrophes in JS comments or the static check lies.
+
 ## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
 
 - INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.

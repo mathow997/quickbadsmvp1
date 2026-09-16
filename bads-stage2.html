@@ -45,6 +45,9 @@
   <button id="autoBtn" style="font-weight:700;background:#e8f5e9;border:2px solid #00c853;padding:10px">⚡ AUTO-MEASURE BEDROOMS</button>
   <small>Auto-places Main + Other + robe exclusions. Then drag edges to snap to wall inner faces.</small>
   <div class="row">
+    <button id="seedBtn" style="font-weight:700">⊕ Click bedroom…</button>
+  </div>
+  <div class="row">
     <button id="addRoom">+ Bedroom</button>
     <button id="addExcl">+ Robe (X)</button>
   </div>
@@ -179,9 +182,9 @@ function hitAll(p){
 }
 function hitTest(p){const h=hitAll(p);return h.length?h[h.length-1]:null;}
 let cycleIdx=0,lastClick={x:0,y:0,t:0};
-let drag=null,resizeH=null,pan=null,spaceDown=false;
+let drag=null,resizeH=null,pan=null,spaceDown=false,seedMode=false;
 window.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){/* nothing modal right now */}
+  if(e.key==='Escape'){seedMode=false;document.getElementById('seedBtn').textContent='⊕ Click bedroom…';}
   if(e.code==='Space')spaceDown=true;
 });
 window.addEventListener('keyup',e=>{if(e.code==='Space')spaceDown=false;});
@@ -189,6 +192,7 @@ cv.addEventListener('pointerdown',e=>{
   cv.setPointerCapture(e.pointerId);
   const p=toImg(e);
   if(e.button===1||e.button===2||spaceDown){pan={sx:e.clientX,sy:e.clientY,ox:view.ox,oy:view.oy};return;}
+  if(seedMode&&e.button===0){seedBed(p);return;}
   const h=hitHandle(e);
   if(h&&sel){const s=pxPerMm||0.5;resizeH={h,b:sel.ref,s};return;}
   const hits=hitAll(p);
@@ -475,7 +479,7 @@ async function runVecV2(out){
       let sup=0,a0=1e18,a1=-1e18,cs=0;
       arr.forEach(s=>{sup+=s.len;a0=Math.min(a0,s.a0);a1=Math.max(a1,s.a1);cs+=s.c*s.len;});
       if(sup<300)continue;
-      planes.push({c:cs/sup,a0,a1,sup,n:arr.length});
+      planes.push({c:cs/sup,a0,a1,sup,n:arr.length,members:arr.map(s=>({a0:s.a0,a1:s.a1}))});
     }
     planes.sort((a,b)=>a.c-b.c);
     return planes;
@@ -617,7 +621,6 @@ function fitRoom(r){
   const pick=(planes,horiz,before)=>{
     let best=null,bd=1e18;
     for(const p of planes){
-      if(p.sup<1000)continue;
       const pos=horiz?toImgH(p.c):toImgV(p.c);
       const e0=horiz?toImgV(p.a0):toImgH(p.a0),e1=horiz?toImgV(p.a1):toImgH(p.a1);
       const lo=Math.min(e0,e1),hi=Math.max(e0,e1);
@@ -625,6 +628,12 @@ function fitRoom(r){
       if(spanCtr<lo||spanCtr>hi)continue; // plane must span the seed (openings spanned via union)
       const d=before?(distCtr-pos):(pos-distCtr);
       if(d<0||d>4500*s)continue;
+      let loc=0; // v5: local member support within 3m of seed (distant colinear lines excluded)
+      for(const m of (p.members||[])){
+        const m0=horiz?toImgV(m.a0):toImgH(m.a0),m1=horiz?toImgV(m.a1):toImgH(m.a1);
+        loc+=Math.max(0,Math.min(Math.max(m0,m1),spanCtr+3000*s)-Math.max(Math.min(m0,m1),spanCtr-3000*s))/s;
+      }
+      if(loc<500)continue;
       if(d<bd){bd=d;best={pos,d};}
     }
     return best;
@@ -726,6 +735,16 @@ function renderList(){
   el.appendChild(ex);
   const c=sel&&sel.kind==='room'?checkRoom(sel.ref):null;
   document.getElementById('info').innerHTML=sel?'<small><b>'+(sel.ref.label||sel.kind)+'</b> '+Math.round(sel.ref.wMm)+' x '+Math.round(sel.ref.dMm)+'mm = '+(sel.kind==='room'?(netAreaMm2(sel.ref)/1e6).toFixed(2)+'m² net':'robe exclusion')+(c?' '+(c.ok?'<span class=ok>✓</span>':'<span class=warn>✗ '+c.need+'</span>'):'')+'</small>':'<small>No selection. Click a box, drag handles to snap to walls.</small>';
+}
+document.getElementById('seedBtn').onclick=e=>{seedMode=true;e.target.textContent='● Click inside a bedroom… (Esc cancels)';};
+function seedBed(p){
+  seedMode=false;document.getElementById('seedBtn').textContent='⊕ Click bedroom…';
+  if(!bg||!pxPerMm){alert('Load a PDF first');return;}
+  const r={id:uid++,type:'other',label:'BEDROOM',x:p.x,y:p.y,wMm:3200,dMm:3200,rot:0};
+  rooms.push(r);
+  const ok=window.lastVec&&window.lastVec.planesH?fitRoom(r):false;
+  sel={kind:'room',ref:r};draw();renderList();
+  document.getElementById('autoMsg').innerHTML='<small>Seeded at click'+(ok?' — fitted to inner wall faces.':' — no wall planes (inspect first?), drag edges.')+'</small>';
 }
 document.getElementById('addRoom').onclick=()=>{
   if(!bg){alert('Load plan first');return;}
