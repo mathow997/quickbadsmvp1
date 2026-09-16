@@ -456,23 +456,34 @@ async function runVecV2(out){
   };
   const planesH=cluster(candH),planesV=cluster(candV);
   // ----- v3: unclosed-rect assembly (2H+2V segs, endpoints within ~2mm) -----
-  const tol=2/mmPerPt;
+  const tol=10/mmPerPt; // v4.3: endpoint-to-segment (overshoot + T-junction tolerant)
   const asm=[];
   if(H.length*V.length<60000000){
-    const vEnds=[];V.forEach((s,vi)=>{vEnds.push({x:s.x1,y:s.y1,vi});vEnds.push({x:s.x2,y:s.y2,vi});});
     const cornerMap=new Map(),hCorners=new Map(),vCorners=new Map();
     const reg=(mp,k,c)=>{if(!mp.has(k))mp.set(k,[]);mp.get(k).push(c);};
+    const dPS=(px,py,s)=>{
+      const dx=s.x2-s.x1,dy=s.y2-s.y1,L2=dx*dx+dy*dy||1;
+      let t=((px-s.x1)*dx+(py-s.y1)*dy)/L2;t=Math.max(0,Math.min(1,t));
+      const qx=s.x1+t*dx,qy=s.y1+t*dy;
+      return{d:Math.hypot(px-qx,py-qy),qx,qy};
+    };
+    const addCorner=(ex,ey,qx,qy,hi,vi)=>{
+      const cx=(ex+qx)/2,cy=(ey+qy)/2;
+      if(cx<0||cy<0||cx>pgW||cy>pgH)return; // off-page content ignored
+      const k=Math.round(cx/tol)+':'+Math.round(cy/tol);
+      let c=cornerMap.get(k);
+      if(!c){c={x:cx,y:cy,hs:new Set(),vs:new Set()};cornerMap.set(k,c);}
+      if(!c.hs.has(hi)){c.hs.add(hi);reg(hCorners,hi,c);}
+      if(!c.vs.has(vi)){c.vs.add(vi);reg(vCorners,vi,c);}
+    };
     H.forEach((s,hi)=>{
       [[s.x1,s.y1],[s.x2,s.y2]].forEach(([ex,ey])=>{
-        for(const ve of vEnds){
-          if(Math.abs(ve.x-ex)<tol&&Math.abs(ve.y-ey)<tol){
-            const cx=(ex+ve.x)/2,cy=(ey+ve.y)/2,k=Math.round(cx/tol)+':'+Math.round(cy/tol);
-            let c=cornerMap.get(k);
-            if(!c){c={x:cx,y:cy,hs:new Set(),vs:new Set()};cornerMap.set(k,c);}
-            if(!c.hs.has(hi)){c.hs.add(hi);reg(hCorners,hi,c);}
-            if(!c.vs.has(ve.vi)){c.vs.add(ve.vi);reg(vCorners,ve.vi,c);}
-          }
-        }
+        for(let vi=0;vi<V.length;vi++){const r=dPS(ex,ey,V[vi]);if(r.d<tol)addCorner(ex,ey,r.qx,r.qy,hi,vi);}
+      });
+    });
+    V.forEach((s,vi)=>{
+      [[s.x1,s.y1],[s.x2,s.y2]].forEach(([ex,ey])=>{
+        for(let hi=0;hi<H.length;hi++){const r=dPS(ex,ey,H[hi]);if(r.d<tol)addCorner(r.qx,r.qy,ex,ey,hi,vi);}
       });
     });
     const asmSeen=new Set();
@@ -497,7 +508,8 @@ async function runVecV2(out){
     }
   }
   // ----- v3: dedupe (overlap + same dims = one; kills double-drawn beds) -----
-  const allR=[...rects.map(r=>({...r,open:false})),...asm];
+  const inPage=r=>r.x1>=0&&r.y1>=0&&r.x0<=pgW&&r.y0<=pgH;
+  const allR=[...rects.map(r=>({...r,open:false})),...asm].filter(inPage);
   allR.sort((a,b)=>(b.w*b.h)-(a.w*a.h));
   const dedup=[];
   for(const r of allR){
@@ -517,7 +529,13 @@ async function runVecV2(out){
       return Math.hypot(dx,dy)*mmPerPt<800;
     }).length;
   });
-  const beds=dedup.filter(r=>{const s=Math.min(r.w,r.h),l=Math.max(r.w,r.h);return r.support>=2&&s>=800&&s<=1950&&l>=1750&&l<=2150;});
+  const proxOK=r=>{ // v4.3: bed must sit near real wall planes (kills legend/title rects)
+    const cx=(r.x0+r.x1)/2,cy=(r.y0+r.y1)/2;
+    for(const p of planesH){if(p.sup<1000)continue;if(cx<p.a0||cx>p.a1)continue;if(Math.abs(cy-p.c)*mmPerPt<1500)return true;}
+    for(const p of planesV){if(p.sup<1000)continue;if(cy<p.a0||cy>p.a1)continue;if(Math.abs(cx-p.c)*mmPerPt<1500)return true;}
+    return false;
+  };
+  const beds=dedup.filter(r=>{const s=Math.min(r.w,r.h),l=Math.max(r.w,r.h);return r.support>=2&&s>=800&&s<=1950&&l>=1750&&l<=2150&&proxOK(r);});
   const nearBand=dedup.filter(r=>{const l=Math.max(r.w,r.h);return l>=1500&&l<=2300;});
   const gapHist={};
   [...pH.gaps,...pV.gaps].forEach(g=>{const b=Math.floor(g/20)*20,k=b+'–'+(b+20);gapHist[k]=(gapHist[k]||0)+1;});
@@ -525,12 +543,12 @@ async function runVecV2(out){
   window.lastVecKey=fileName+'|'+document.getElementById('pageno').value;
   const topW=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([w,n])=>w+'pt×'+n).join(', ')||'—';
   let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V, '+cuN+' curve-out) · '+rects.length+' rects · '+fills.length+' fills<br>';
-  h2+='<b>Wall planes</b>: H='+planesH.length+' V='+planesV.length+' (fill edges + ≥0.6pt dark strokes, 30mm merge)<br>';
+  h2+='<b>Wall planes</b>: H='+planesH.length+' V='+planesV.length+' (fill edges + ≥0.6pt dark strokes, 10mm bins)<br>';
   h2+='<b>Wall pairs</b> (dark, parallel, 60–350mm apart, &gt;50% overlap): H='+pH.pairs+' (of '+pH.n+' dark H) V='+pV.pairs+' (of '+pV.n+' dark V)<br>';
   h2+='<small>paired widths H: '+topW(pH.wHist)+' · V: '+topW(pV.wHist)+'</small><br>';
   const at=b=>'@'+Math.round((b.x0+b.x1)/2/pgW*100)+','+Math.round((1-(b.y0+b.y1)/2/pgH)*100)+'%';
   h2+='<b>Bed rects</b> ('+beds.length+' of '+dedup.length+' dedup, '+asm.length+' assembled-open): '+beds.slice(0,8).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+'mm sup'+b.support+at(b)).join(' · ')+'<br>';
-  h2+='<b>Near bed band</b> (long side 1500–2300): '+nearBand.slice(0,10).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?' open':' closed')+' sup'+b.support+at(b)).join(' · ')+'<br>';
+  h2+='<b>Near bed band</b> (long side 1500–2300): '+nearBand.slice(0,10).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?' open':' closed')+' sup'+b.support+(proxOK(b)?'':' NOPROX')+at(b)).join(' · ')+'<br>';
   h2+='<b>Pair-gap histogram</b> (20mm bins): '+Object.entries(gapHist).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,n])=>k+'mm×'+n).join(', ')+'<br>';
   h2+='<b>Dark fills top 8 by area</b> (wall poche / robe hatch candidates)<table><tr><th>color</th><th>W×H mm</th></tr>';
   fills.map(f=>({f,a:(f.x1-f.x0)*(f.y1-f.y0)})).sort((a,b)=>b.a-a.a).filter(({f})=>isDark(f.c)).slice(0,8).forEach(({f})=>{

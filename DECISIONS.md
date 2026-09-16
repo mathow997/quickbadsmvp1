@@ -135,6 +135,15 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
   auto message prints seed box positions in canvas %. Next off-target report pinpoints
   detection (wrong @) vs mapping (right @, wrong box) vs fit (right seed, wrong planes).
 
+## 2026-09-16 — v4.3: scope + tolerant corners (built, pushed)
+
+- Root cause of off-target box: detected "bed" sat at sheet (5%,86%) with a sibling at
+  (-15%,85%) — legend/off-page junk, not the apartment bed. Fit correctly refused (0/1).
+- Fixes: endpoint-to-segment corners (10mm tol; overshoot + T-junction tolerant, replaces
+  endpoint-endpoint 2mm); page-bounds clip on corners and rects (kills -15% class);
+  beds require wall proximity (<1500mm from a sup≥1000 plane — kills legend class).
+- Near-band list marks NOPROX so rejected candidates stay visible for tuning.
+
 ## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
 
 - INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.
