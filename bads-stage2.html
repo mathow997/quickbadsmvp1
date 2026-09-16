@@ -529,13 +529,14 @@ async function runVecV2(out){
       return Math.hypot(dx,dy)*mmPerPt<800;
     }).length;
   });
-  const proxOK=r=>{ // v4.3: bed must sit near real wall planes (kills legend/title rects)
-    const cx=(r.x0+r.x1)/2,cy=(r.y0+r.y1)/2;
-    for(const p of planesH){if(p.sup<1000)continue;if(cx<p.a0||cx>p.a1)continue;if(Math.abs(cy-p.c)*mmPerPt<1500)return true;}
-    for(const p of planesV){if(p.sup<1000)continue;if(cy<p.a0||cy>p.a1)continue;if(Math.abs(cx-p.c)*mmPerPt<1500)return true;}
-    return false;
+  const enclosed=r=>{ // v4.4: bed must sit inside wall enclosure (3+ of 4 rays hit planes <6m)
+    const cx=(r.x0+r.x1)/2,cy=(r.y0+r.y1)/2;let dirs=0;
+    const anyH=sgn=>planesH.some(p=>p.sup>=1000&&cx>=p.a0&&cx<=p.a1&&((p.c-cy)*mmPerPt*sgn>0)&&Math.abs((p.c-cy)*mmPerPt)<6000);
+    const anyV=sgn=>planesV.some(p=>p.sup>=1000&&cy>=p.a0&&cy<=p.a1&&((p.c-cx)*mmPerPt*sgn>0)&&Math.abs((p.c-cx)*mmPerPt)<6000);
+    if(anyH(1))dirs++;if(anyH(-1))dirs++;if(anyV(1))dirs++;if(anyV(-1))dirs++;
+    return dirs>=3;
   };
-  const beds=dedup.filter(r=>{const s=Math.min(r.w,r.h),l=Math.max(r.w,r.h);return r.support>=2&&s>=800&&s<=1950&&l>=1750&&l<=2150&&proxOK(r);});
+  const beds=dedup.filter(r=>{const s=Math.min(r.w,r.h),l=Math.max(r.w,r.h);return r.support>=2&&s>=800&&s<=1950&&l>=1750&&l<=2150&&enclosed(r);});
   const nearBand=dedup.filter(r=>{const l=Math.max(r.w,r.h);return l>=1500&&l<=2300;});
   const gapHist={};
   [...pH.gaps,...pV.gaps].forEach(g=>{const b=Math.floor(g/20)*20,k=b+'–'+(b+20);gapHist[k]=(gapHist[k]||0)+1;});
@@ -548,7 +549,8 @@ async function runVecV2(out){
   h2+='<small>paired widths H: '+topW(pH.wHist)+' · V: '+topW(pV.wHist)+'</small><br>';
   const at=b=>'@'+Math.round((b.x0+b.x1)/2/pgW*100)+','+Math.round((1-(b.y0+b.y1)/2/pgH)*100)+'%';
   h2+='<b>Bed rects</b> ('+beds.length+' of '+dedup.length+' dedup, '+asm.length+' assembled-open): '+beds.slice(0,8).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+'mm sup'+b.support+at(b)).join(' · ')+'<br>';
-  h2+='<b>Near bed band</b> (long side 1500–2300): '+nearBand.slice(0,10).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?' open':' closed')+' sup'+b.support+(proxOK(b)?'':' NOPROX')+at(b)).join(' · ')+'<br>';
+  h2+='<b>Near bed band</b> (long side 1500–2300): '+nearBand.slice(0,10).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?' open':' closed')+' sup'+b.support+(enclosed(b)?'':' NOENCL')+at(b)).join(' · ')+'<br>';
+  h2+='<b>Biggest dedup rects</b>: '+dedup.slice(0,12).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?'o':'c')+' sup'+b.support+(enclosed(b)?'':' NOENCL')+at(b)).join(' · ')+'<br>';
   h2+='<b>Pair-gap histogram</b> (20mm bins): '+Object.entries(gapHist).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,n])=>k+'mm×'+n).join(', ')+'<br>';
   h2+='<b>Dark fills top 8 by area</b> (wall poche / robe hatch candidates)<table><tr><th>color</th><th>W×H mm</th></tr>';
   fills.map(f=>({f,a:(f.x1-f.x0)*(f.y1-f.y0)})).sort((a,b)=>b.a-a.a).filter(({f})=>isDark(f.c)).slice(0,8).forEach(({f})=>{

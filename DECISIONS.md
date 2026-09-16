@@ -144,6 +144,14 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
   beds require wall proximity (<1500mm from a sup≥1000 plane — kills legend class).
 - Near-band list marks NOPROX so rejected candidates stay visible for tuning.
 
+## 2026-09-16 — v4.4: enclosure filter + biggest-rects diagnostic (built, pushed)
+
+- Near-band revealed a legend row (six 1600-tall swatches, bottom-left paper) that assembles
+  perfectly — shape filters can't beat legends. Replaced proximity with enclosure: bed needs
+  walls on 3+ of 4 ray directions (<6m, sup≥1000 planes). Legend in open paper fails it.
+- Biggest-12 rects printed with enclosure flags: shows whether the real bed assembles at all
+  and which filter rejects it. Caught pre-push: marker still called removed proxOK — fixed.
+
 ## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
 
 - INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.
