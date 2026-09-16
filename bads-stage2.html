@@ -586,6 +586,16 @@ async function runVecV2(out){
   h2+='<b>Near bed band</b> (long side 1500–2300): '+nearBand.slice(0,10).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?' open':' closed')+' sup'+b.support+(enclosed(b)?'':' NOENCL')+at(b)).join(' · ')+'<br>';
   h2+='<b>Biggest dedup rects</b>: '+dedup.slice(0,12).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?'o':'c')+' sup'+b.support+(enclosed(b)?'':' NOENCL')+at(b)).join(' · ')+'<br>';
   h2+='<b>Pair-gap histogram</b> (20mm bins): '+Object.entries(gapHist).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,n])=>k+'mm×'+n).join(', ')+'<br>';
+  h2+='<b>Dark fills with pos (top 20)</b><table><tr><th>color</th><th>W×H mm</th><th>@x,y%</th></tr>';
+  fills.map(f=>({f,a:(f.x1-f.x0)*(f.y1-f.y0)})).sort((a,b)=>b.a-a.a).filter(({f})=>isDark(f.c)).slice(0,20).forEach(({f})=>{
+    h2+='<tr><td>'+f.c.join(',')+'</td><td>'+Math.round((f.x1-f.x0)*mmPerPt)+'×'+Math.round((f.y1-f.y0)*mmPerPt)+'</td><td>'+Math.round((f.x0+f.x1)/2/pgW*100)+','+Math.round((1-(f.y0+f.y1)/2/pgH)*100)+'%</td></tr>';
+  });
+  h2+='</table>';
+  h2+='<b>Heavy-stroke metres per 3x3 cell</b> (dark, ≥0.6pt, arcs out)<table><tr><th></th><th>left</th><th>ctr</th><th>right</th></tr>';
+  const grid=[0,0,0,0,0,0,0,0,0];
+  strokes.forEach(s=>{if(s.cu||!isDark(s.c)||s.w<0.6)return;const mx=(s.x1+s.x2)/2/pgW,my=1-(s.y1+s.y2)/2/pgH;if(mx<0||my<0||mx>1||my>1)return;grid[Math.min(2,Math.floor(my*3))*3+Math.min(2,Math.floor(mx*3))]+=Math.hypot(s.x2-s.x1,s.y2-s.y1)*mmPerPt/1000;});
+  ['top','mid','bot'].forEach((r,gy)=>{h2+='<tr><td>'+r+'</td>'+[0,1,2].map(gx=>'<td>'+grid[gy*3+gx].toFixed(1)+'</td>').join('')+'</tr>';});
+  h2+='</table>';
   h2+='<b>Dark fills top 8 by area</b> (wall poche / robe hatch candidates)<table><tr><th>color</th><th>W×H mm</th></tr>';
   fills.map(f=>({f,a:(f.x1-f.x0)*(f.y1-f.y0)})).sort((a,b)=>b.a-a.a).filter(({f})=>isDark(f.c)).slice(0,8).forEach(({f})=>{
     h2+='<tr><td>'+(f.c?f.c.join(','):'pattern')+'</td><td>'+Math.round((f.x1-f.x0)*mmPerPt)+'×'+Math.round((f.y1-f.y0)*mmPerPt)+'</td></tr>';
