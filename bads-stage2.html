@@ -587,6 +587,8 @@ async function runVecV2(out){
   h2+='<b>Bed rects</b> ('+beds.length+' of '+dedup.length+' dedup, '+asm.length+' assembled-open): '+beds.slice(0,8).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+'mm sup'+b.support+at(b)).join(' · ')+'<br>';
   h2+='<b>Near bed band</b> (long side 1500–2300): '+nearBand.slice(0,10).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?' open':' closed')+' sup'+b.support+(enclosed(b)?'':' NOENCL')+at(b)).join(' · ')+'<br>';
   h2+='<b>Biggest dedup rects</b>: '+dedup.slice(0,12).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?'o':'c')+' sup'+b.support+(enclosed(b)?'':' NOENCL')+at(b)).join(' · ')+'<br>';
+  const roomBand=dedup.filter(r=>{const s=Math.min(r.w,r.h),l=Math.max(r.w,r.h);return s>=2400&&s<=5000&&l>=2400&&l<=6000;});
+  h2+='<b>Room band</b> (2.4–6m sides): '+roomBand.slice(0,12).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?'o':'c')+' sup'+b.support+(enclosed(b)?'':' NOENCL')+at(b)).join(' · ')+'<br>';
   h2+='<b>Pair-gap histogram</b> (20mm bins): '+Object.entries(gapHist).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,n])=>k+'mm×'+n).join(', ')+'<br>';
   h2+='<b>Dark fills with pos (top 20)</b><table><tr><th>color</th><th>W×H mm</th><th>@x,y%</th></tr>';
   fills.map(f=>({f,a:(f.x1-f.x0)*(f.y1-f.y0)})).sort((a,b)=>b.a-a.a).filter(({f})=>isDark(f.c)).slice(0,20).forEach(({f})=>{
