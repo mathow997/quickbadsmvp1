@@ -438,17 +438,20 @@ async function runVecV2(out){
     candV.push({c:(s.x1+s.x2)/2,a0:Math.min(s.y1,s.y2),a1:Math.max(s.y1,s.y2),len});
   });
   const cluster=list=>{
-    list.sort((a,b)=>a.c-b.c);
-    const planes=[];
+    const bins=new Map(); // v4.2: fixed 10mm bins, no chaining (chaining made mega-planes)
     for(const s of list){
-      const last=planes[planes.length-1];
-      if(last&&(s.c-last.c)*mmPerPt<=30){
-        const wsum=last.sup+s.len;
-        last.c=(last.c*last.sup+s.c*s.len)/wsum;
-        last.a0=Math.min(last.a0,s.a0);last.a1=Math.max(last.a1,s.a1);
-        last.sup=wsum;last.n++;
-      }else planes.push({c:s.c,a0:s.a0,a1:s.a1,sup:s.len,n:1});
+      const b=Math.round(s.c*mmPerPt/10)*10;
+      if(!bins.has(b))bins.set(b,[]);
+      bins.get(b).push(s);
     }
+    const planes=[];
+    for(const arr of bins.values()){
+      let sup=0,a0=1e18,a1=-1e18,cs=0;
+      arr.forEach(s=>{sup+=s.len;a0=Math.min(a0,s.a0);a1=Math.max(a1,s.a1);cs+=s.c*s.len;});
+      if(sup<300)continue;
+      planes.push({c:cs/sup,a0,a1,sup,n:arr.length});
+    }
+    planes.sort((a,b)=>a.c-b.c);
     return planes;
   };
   const planesH=cluster(candH),planesV=cluster(candV);
@@ -525,8 +528,9 @@ async function runVecV2(out){
   h2+='<b>Wall planes</b>: H='+planesH.length+' V='+planesV.length+' (fill edges + ≥0.6pt dark strokes, 30mm merge)<br>';
   h2+='<b>Wall pairs</b> (dark, parallel, 60–350mm apart, &gt;50% overlap): H='+pH.pairs+' (of '+pH.n+' dark H) V='+pV.pairs+' (of '+pV.n+' dark V)<br>';
   h2+='<small>paired widths H: '+topW(pH.wHist)+' · V: '+topW(pV.wHist)+'</small><br>';
-  h2+='<b>Bed rects</b> ('+beds.length+' of '+dedup.length+' dedup, '+asm.length+' assembled-open): '+beds.slice(0,8).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+'mm sup'+b.support).join(' · ')+'<br>';
-  h2+='<b>Near bed band</b> (long side 1500–2300): '+nearBand.slice(0,10).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?' open':' closed')+' sup'+b.support).join(' · ')+'<br>';
+  const at=b=>'@'+Math.round((b.x0+b.x1)/2/pgW*100)+','+Math.round((1-(b.y0+b.y1)/2/pgH)*100)+'%';
+  h2+='<b>Bed rects</b> ('+beds.length+' of '+dedup.length+' dedup, '+asm.length+' assembled-open): '+beds.slice(0,8).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+'mm sup'+b.support+at(b)).join(' · ')+'<br>';
+  h2+='<b>Near bed band</b> (long side 1500–2300): '+nearBand.slice(0,10).map(b=>Math.round(Math.min(b.w,b.h))+'×'+Math.round(Math.max(b.w,b.h))+(b.open?' open':' closed')+' sup'+b.support+at(b)).join(' · ')+'<br>';
   h2+='<b>Pair-gap histogram</b> (20mm bins): '+Object.entries(gapHist).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([k,n])=>k+'mm×'+n).join(', ')+'<br>';
   h2+='<b>Dark fills top 8 by area</b> (wall poche / robe hatch candidates)<table><tr><th>color</th><th>W×H mm</th></tr>';
   fills.map(f=>({f,a:(f.x1-f.x0)*(f.y1-f.y0)})).sort((a,b)=>b.a-a.a).filter(({f})=>isDark(f.c)).slice(0,8).forEach(({f})=>{
@@ -598,13 +602,16 @@ document.getElementById('autoBtn').onclick=async()=>{
   let seedMsg='';
   if(seeds.length){
     const ptW=W/RENDER,ptH=H/RENDER;
+    const posStr=[];
     seeds.forEach((b,i)=>{
       const cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2;
       const wMm=Math.max(3400,Math.round((Math.max(b.w,b.h)+800)/10)*10);
       const dMm=Math.max(3200,Math.round((Math.min(b.w,b.h)+800)/10)*10);
-      rooms.push({id:uid++,type:'other',label:'BEDROOM '+(i+1),x:cx/ptW*W,y:(ptH-cy)/ptH*H,wMm,dMm,rot:0});
+      const ix=cx/ptW*W,iy=(ptH-cy)/ptH*H;
+      posStr.push(Math.round(ix/W*100)+','+Math.round(iy/H*100)+'%');
+      rooms.push({id:uid++,type:'other',label:'BEDROOM '+(i+1),x:ix,y:iy,wMm,dMm,rot:0});
     });
-    seedMsg='Seeded '+seeds.length+' boxes on detected beds. ';
+    seedMsg='Seeded '+seeds.length+' boxes on detected beds ('+posStr.join(' ')+'). ';
   }else{
     if(wantBeds===1){rooms.push(R('main','BEDROOM 1',0.30,0.36,0.42,0.55));}
     if(wantBeds===2){rooms.push(R('main','BEDROOM 1',0.26,0.36,0.32,0.55));rooms.push(R('other','BEDROOM 2',0.26,0.36,0.64,0.55));}

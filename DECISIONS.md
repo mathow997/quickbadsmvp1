@@ -127,6 +127,14 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
   per-side plane distances (mm) onto each room, printed in the auto message.
 - Added 📋 Copy inspector output (clipboard API + execCommand fallback for file://).
 
+## 2026-09-16 — v4.2: binned planes + position diagnostics (built, pushed)
+
+- Chained 30mm clustering merged everything into 4 mega-planes → replaced with fixed 10mm
+  bins (sup<300 dropped). Same change kills cross-page chaining.
+- Position diagnostics: bed + near-band rects print sheet fractions (@x%,y-from-top);
+  auto message prints seed box positions in canvas %. Next off-target report pinpoints
+  detection (wrong @) vs mapping (right @, wrong box) vs fit (right seed, wrong planes).
+
 ## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
 
 - INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.
