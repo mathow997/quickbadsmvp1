@@ -48,6 +48,7 @@
     <button id="addRoom">+ Bedroom</button>
     <button id="addExcl">+ Robe (X)</button>
   </div>
+  <label><input type="checkbox" id="showVec" style="width:auto"> Show detection overlay (beds green, bed-band yellow, wall planes blue)</label><br>
   <label><input type="checkbox" id="hideExcl" style="width:auto"> Hide robe exclusions (also never exported)</label><br>
   <label><input type="checkbox" id="contrast" style="width:auto"> Wall contrast boost</label><br>
   <label><input type="checkbox" id="showIds" checked style="width:auto"> Show dimensions</label>
@@ -111,6 +112,7 @@ function draw(){
   const hideX=document.getElementById('hideExcl').checked;
   if(!hideX)excls.forEach(e=>drawExcl(e));
   rooms.forEach(r=>drawRoom(r));
+  if(document.getElementById('showVec').checked)drawVec();
   if(sel){drawHandles(sel.ref);}
 }
 function toScreen(x,y){return{x:view.ox+x*view.s,y:view.oy+y*view.s};}
@@ -456,8 +458,8 @@ async function runVecV2(out){
   };
   const planesH=cluster(candH),planesV=cluster(candV);
   // ----- v3: unclosed-rect assembly (2H+2V segs, endpoints within ~2mm) -----
-  const tol=10/mmPerPt; // v4.3: endpoint-to-segment (overshoot + T-junction tolerant)
-  const asm=[];
+  const tol=20/mmPerPt; // v4.5: endpoint-to-segment, 20mm (overshoot + T-junction tolerant)
+  const asm=[];let cornerN=0;
   if(H.length*V.length<60000000){
     const cornerMap=new Map(),hCorners=new Map(),vCorners=new Map();
     const reg=(mp,k,c)=>{if(!mp.has(k))mp.set(k,[]);mp.get(k).push(c);};
@@ -486,6 +488,7 @@ async function runVecV2(out){
         for(let hi=0;hi<H.length;hi++){const r=dPS(ex,ey,H[hi]);if(r.d<tol)addCorner(r.qx,r.qy,ex,ey,hi,vi);}
       });
     });
+    cornerN=cornerMap.size;
     const asmSeen=new Set();
     for(const c of cornerMap.values()){
       for(const hi of c.hs){const hc=hCorners.get(hi)||[];
@@ -540,10 +543,10 @@ async function runVecV2(out){
   const nearBand=dedup.filter(r=>{const l=Math.max(r.w,r.h);return l>=1500&&l<=2300;});
   const gapHist={};
   [...pH.gaps,...pV.gaps].forEach(g=>{const b=Math.floor(g/20)*20,k=b+'–'+(b+20);gapHist[k]=(gapHist[k]||0)+1;});
-  window.lastVec={mmPerPt,segments:strokes.length,cuN,rects,fills,beds,dedup,asmCount:asm.length,pH,pV,planesH,planesV};
+  window.lastVec={mmPerPt,segments:strokes.length,cuN,rects,fills,beds,dedup,nearBand,asmCount:asm.length,cornerN,pH,pV,planesH,planesV};
   window.lastVecKey=fileName+'|'+document.getElementById('pageno').value;
   const topW=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([w,n])=>w+'pt×'+n).join(', ')||'—';
-  let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V, '+cuN+' curve-out) · '+rects.length+' rects · '+fills.length+' fills<br>';
+  let h2='<br><b>— V2 GEOMETRY —</b> '+strokes.length+' segs ('+H.length+' H / '+V.length+' V, '+cuN+' curve-out) · '+rects.length+' rects · '+cornerN+' corners · '+fills.length+' fills<br>';
   h2+='<b>Wall planes</b>: H='+planesH.length+' V='+planesV.length+' (fill edges + ≥0.6pt dark strokes, 10mm bins)<br>';
   h2+='<b>Wall pairs</b> (dark, parallel, 60–350mm apart, &gt;50% overlap): H='+pH.pairs+' (of '+pH.n+' dark H) V='+pV.pairs+' (of '+pV.n+' dark V)<br>';
   h2+='<small>paired widths H: '+topW(pH.wHist)+' · V: '+topW(pV.wHist)+'</small><br>';
@@ -565,6 +568,20 @@ async function runVecV2(out){
   out.innerHTML+=h2;
 }
 
+// ---------- v4.5: detection overlay (beds green, bed-band yellow, planes blue) ----------
+function drawVec(){
+  const LV=window.lastVec;
+  if(!LV||!bg)return;
+  const ptW=bg.width/RENDER,ptH=bg.height/RENDER;
+  const IX=pt=>view.ox+pt/ptW*bg.width*view.s, IY=pt=>view.oy+(ptH-pt)/ptH*bg.height*view.s;
+  ctx.save();ctx.lineWidth=2;
+  (LV.planesH||[]).forEach(p=>{if(p.sup<1000)return;ctx.strokeStyle='rgba(25,118,210,0.85)';ctx.beginPath();ctx.moveTo(IX(p.a0),IY(p.c));ctx.lineTo(IX(p.a1),IY(p.c));ctx.stroke();});
+  (LV.planesV||[]).forEach(p=>{if(p.sup<1000)return;ctx.strokeStyle='rgba(25,118,210,0.85)';ctx.beginPath();ctx.moveTo(IX(p.c),IY(p.a0));ctx.lineTo(IX(p.c),IY(p.a1));ctx.stroke();});
+  const box=(r,col)=>{ctx.strokeStyle=col;ctx.strokeRect(IX(r.x0),IY(r.y1),IX(r.x1)-IX(r.x0),IY(r.y0)-IY(r.y1));};
+  (LV.nearBand||[]).forEach(r=>box(r,'rgba(255,193,7,0.9)'));
+  (LV.beds||[]).forEach(r=>box(r,'rgba(0,200,83,0.95)'));
+  ctx.restore();
+}
 // ---------- v4: wall-fit — grow boxes to nearest inner-face planes ----------
 function fitRoom(r){
   const LV=window.lastVec;
@@ -694,6 +711,7 @@ document.getElementById('addExcl').onclick=()=>{
   const e={id:uid++,label:'ROBE (excluded)',x:bg.width/2,y:bg.height/2,wMm:700,dMm:1800,rot:0};
   excls.push(e);sel={kind:'excl',ref:e};draw();renderList();
 };
+document.getElementById('showVec').onchange=draw;
 document.getElementById('hideExcl').onchange=draw;
 document.getElementById('contrast').onchange=draw;
 document.getElementById('showIds').onchange=draw;

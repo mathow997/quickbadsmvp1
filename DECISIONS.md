@@ -152,6 +152,15 @@ Format: date · decision · why · what it kills/defers. Newest at the bottom.
 - Biggest-12 rects printed with enclosure flags: shows whether the real bed assembles at all
   and which filter rejects it. Caught pre-push: marker still called removed proxOK — fixed.
 
+## 2026-09-16 — v4.5: overlay + tolerant corners (built, pushed)
+
+- Fit detail `[T240 B1960 L1298 R1302]` proved the machine fits fine — it fit the wrong room
+  because the seed was legend junk. Enclosure now blocks that class (Bed rects: 0).
+- Detection overlay: beds green, bed-band yellow, sup≥1000 planes blue (toggle). One screenshot
+  replaces paste cycles from here on.
+- Corner tol 2→20mm; corner count printed. Real bed still not assembling — overlay shows where
+  its lines go missing.
+
 ## 2026-09-16 — bedroom markup rules (from 1BED screenshot, hard constraints)
 
 - INNER WALL FACE IS HARD: box edges stop at the first dark line/fill edge from room center.
