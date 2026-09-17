@@ -316,3 +316,8 @@ Entries stay chronological; the live question is always the last entry.
   is viewport rotation or XObject matrices; (3) confirm FH raster-fit outcome (box stayed raw seed
   at click; autoMsg unknown — user ran Raster bands, fit result unconfirmed).
 - Status: tree clean. First action: the 3-line crop fix.
+
+## 2026-09-17 — morning: crop-offset fix applied (built, pushed)
+
+- Re-applied last nights reverted fix: capture page.view + rotate at render, subtract offset
+  in P(), print crop/rot in dump header. If FH positions snap sane, vector path revives.

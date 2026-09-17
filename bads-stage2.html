@@ -246,6 +246,7 @@ async function renderPdf(){
   const pdf=await pdfjsLib.getDocument({data:fileBuf.slice(0)}).promise;
   const n=Math.min(Math.max(1,+document.getElementById('pageno').value||1),pdf.numPages);
   const page=await pdf.getPage(n);lastPage=page;
+  try{const vv=page.view||[0,0,0,0];window._pox=vv[0]||0;window._poy=vv[1]||0;window._prot=page.rotate||0;}catch(_){window._pox=0;window._poy=0;window._prot=0;}
   const vp=page.getViewport({scale:RENDER});
   const tmp=document.createElement('canvas');tmp.width=vp.width;tmp.height=vp.height;
   await page.render({canvasContext:tmp.getContext('2d'),viewport:vp}).promise;
@@ -305,7 +306,7 @@ document.getElementById('inspectVec').onclick=async()=>{
     const vp1=lastPage.getViewport({scale:1});
     const txt=lastText.map(t=>t.s).join(' ');
     const mScale=txt.match(/1\s*:\s*(\d+)/);
-    let h='<b>'+fileName+'</b> — '+N+' ops · page '+(vp1.width).toFixed(0)+'×'+(vp1.height).toFixed(0)+'pt ('+(vp1.width*25.4/72).toFixed(0)+'×'+(vp1.height*25.4/72).toFixed(0)+'mm) · title scale '+(mScale?'1:'+mScale[1]:'not found')+'<br><br>';
+    let h='<b>'+fileName+'</b> — '+N+' ops · page '+(vp1.width).toFixed(0)+'×'+(vp1.height).toFixed(0)+'pt ('+(vp1.width*25.4/72).toFixed(0)+'×'+(vp1.height*25.4/72).toFixed(0)+'mm) · title scale '+(mScale?'1:'+mScale[1]:'not found')+' · crop ['+(window._pox||0)+','+(window._poy||0)+'] rot '+(window._prot||0)+'<br><br>';
     h+='<b>Path ops</b><table><tr><th>op</th><th>n</th></tr>';
     ['constructPath','stroke','fill','eoFill','fillStroke','eoFillStroke','clip','eoClip','paintXObject','paintImageXObject'].forEach(k=>{if(counts[k])h+='<tr><td>'+k+'</td><td>'+counts[k]+'</td></tr>';});
     h+='</table><br><b>Line widths (top 10)</b><table><tr><th>w (pt)</th><th>n</th></tr>';
@@ -353,7 +354,7 @@ async function runVecV2(out){
     else{let x0=1e18,y0=1e18,x1=-1e18,y1=-1e18;cur.forEach(sp=>sp.pts.forEach(p=>{x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);}));if(x1>x0&&y1>y0)fills.push({x0,y0,x1,y1,c:fc});}
     cur=[];
   };
-  const P=(x,y)=>P0(ctm,x,y);
+  const P=(x,y)=>{const q=P0(ctm,x,y);return[q[0]-(window._pox||0),q[1]-(window._poy||0)];};
   for(let i=0;i<N;i++){
     const f=fn[i],a=ag[i]||[];
     if(f===O.save){stack.push({lw,sc,fc,ctm:ctm.slice()});continue;}
