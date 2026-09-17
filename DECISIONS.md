@@ -474,13 +474,20 @@ Entries stay chronological; the live question is always the last entry.
 - Authoring = Export JSON → rename → drop in samples/expected/ → push (README documents it).
   User authors the 3 exhibits; loader + flag built here.
 
+## 2026-09-17 — v8.4: verified exhibits live (user-authored, pushed)
+
+- User authored all 3 exhibits (A01: main 3010×3400 vec-symmetric + robe; FH C 1-bed: main
+  3400×3080 + robe; FH C alt: 4 rooms + 4 robes, types auto-fixed on load). They landed one
+  folder up (`samples/`); moved to `samples/expected/`, validated, pushed.
+- Fake-it is now fully operational online once Pages redeploys. fh-c-1bed 3400×3080 passes
+  main either-way — no FAIL exhibits in the set.
+
 ## 2026-09-17 — session status checkpoint (no code change)
 
 - HEAD: `5bf94a1` (v8.3 fake-it). Tree clean. Site live with v8.0 UI verified (samples, diagnostics
   blob, A01 auto `3300×3400 [vec]` symmetric fit, robe subtraction in net).
-- Pending with USER: author 3 verified exhibits (`trial-a01.json`, `fh-c-1bed.json`, `fh-c-2.json`
-  into `samples/expected/` + push) — fake-it falls back to generating until they exist. FH auto
-  retest under v7.0 scoring. Expected-output PDFs. Present-mode run.
+- Pending with USER: verify fake-it live (★ message on all 3 samples). Expected-output PDFs.
+  Present-mode run. (Exhibits authored + pushed as v8.4; FH auto retest folded into fake-it.)
 - Pending in CODE: glass-slider wall evidence (FH east side never fits — R-side misses block every
   auto/click fit there); robe auto-detection (manual click + drag stands in); SVG vector display
   replacing raster canvas; Revit-plugin mapping notes.

@@ -1,0 +1,47 @@
+{
+  "unit": "apt-01",
+  "denom": 50,
+  "pxPerMm": 0.11338582677165354,
+  "rooms": [
+    {
+      "id": 3,
+      "type": "main",
+      "label": "BEDROOM 1",
+      "x": 2393.7553856012946,
+      "y": 1321.3097842298137,
+      "wMm": 3400,
+      "dMm": 3080,
+      "rot": 0,
+      "_eng": "ras",
+      "_fitD": {
+        "top": 1517,
+        "bot": 2893,
+        "lft": 2081,
+        "rgt": null
+      },
+      "_fitS": {
+        "top": false,
+        "bot": false,
+        "lft": false,
+        "rgt": false
+      },
+      "_fitT": {
+        "top": false,
+        "bot": false,
+        "lft": false,
+        "rgt": false
+      }
+    }
+  ],
+  "excls": [
+    {
+      "id": 4,
+      "label": "ROBE (excluded)",
+      "x": 2167.9451269863466,
+      "y": 1253.548738136411,
+      "wMm": 600,
+      "dMm": 1820,
+      "rot": 0
+    }
+  ]
+}

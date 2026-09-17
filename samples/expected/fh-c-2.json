@@ -1,0 +1,161 @@
+{
+  "unit": "apt-01",
+  "denom": 50,
+  "pxPerMm": 0.11338582677165354,
+  "rooms": [
+    {
+      "id": 5,
+      "type": "other",
+      "label": "BEDROOM 1",
+      "x": 1798.749874615163,
+      "y": 1297.900594412516,
+      "wMm": 3034,
+      "dMm": 3200,
+      "rot": 0,
+      "_eng": "ras",
+      "_fitD": {
+        "top": null,
+        "bot": 2081,
+        "lft": 1446,
+        "rgt": 1588
+      },
+      "_fitS": {
+        "top": false,
+        "bot": false,
+        "lft": false,
+        "rgt": false
+      },
+      "_fitT": {
+        "top": false,
+        "bot": false,
+        "lft": false,
+        "rgt": false
+      }
+    },
+    {
+      "id": 6,
+      "type": "other",
+      "label": "BEDROOM 2",
+      "x": 2162.9858992033496,
+      "y": 1307.589808078565,
+      "wMm": 3190,
+      "dMm": 3360,
+      "rot": 0,
+      "_eng": "ras",
+      "_fitD": {
+        "top": null,
+        "bot": 1729,
+        "lft": 1199,
+        "rgt": 1588
+      },
+      "_fitS": {
+        "top": false,
+        "bot": false,
+        "lft": false,
+        "rgt": false
+      },
+      "_fitT": {
+        "top": false,
+        "bot": false,
+        "lft": false,
+        "rgt": false
+      }
+    },
+    {
+      "id": 7,
+      "type": "other",
+      "label": "BEDROOM",
+      "x": 3475.954233120571,
+      "y": 2059.2512470923507,
+      "wMm": 3690,
+      "dMm": 3020,
+      "rot": 0,
+      "_eng": "ras",
+      "_fitD": {
+        "top": 2152,
+        "bot": 882,
+        "lft": 2223,
+        "rgt": 2011
+      },
+      "_fitS": {
+        "top": false,
+        "bot": false,
+        "lft": false,
+        "rgt": false
+      },
+      "_fitT": {
+        "top": false,
+        "bot": false,
+        "lft": false,
+        "rgt": false
+      }
+    },
+    {
+      "id": 8,
+      "type": "other",
+      "label": "BEDROOM 3",
+      "x": 3498.5322328574784,
+      "y": 1707.8506498860781,
+      "wMm": 3250,
+      "dMm": 3010,
+      "rot": 0,
+      "_eng": "ras",
+      "_fitD": {
+        "top": 2258,
+        "bot": 776,
+        "lft": 3210,
+        "rgt": 2611
+      },
+      "_fitS": {
+        "top": false,
+        "bot": false,
+        "lft": false,
+        "rgt": false
+      },
+      "_fitT": {
+        "top": false,
+        "bot": false,
+        "lft": false,
+        "rgt": false
+      }
+    }
+  ],
+  "excls": [
+    {
+      "id": 9,
+      "label": "ROBE (excluded)",
+      "x": 2228.60916023636,
+      "y": 1535.3401323495677,
+      "wMm": 2110,
+      "dMm": 590,
+      "rot": 0
+    },
+    {
+      "id": 10,
+      "label": "ROBE (excluded)",
+      "x": 1738.0597338782293,
+      "y": 1511.987655601622,
+      "wMm": 1830,
+      "dMm": 560,
+      "rot": 0
+    },
+    {
+      "id": 11,
+      "label": "ROBE (excluded)",
+      "x": 3279.2520703190085,
+      "y": 1642.6765217825625,
+      "wMm": 600,
+      "dMm": 1850,
+      "rot": 0
+    },
+    {
+      "id": 12,
+      "label": "ROBE (excluded)",
+      "x": 3233.9210473243334,
+      "y": 2123.482690652226,
+      "wMm": 580,
+      "dMm": 1890,
+      "rot": 0
+    }
+  ]
+}
