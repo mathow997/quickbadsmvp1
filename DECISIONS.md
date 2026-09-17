@@ -20,7 +20,7 @@ Entries stay chronological; the live question is always the last entry.
 - Verify before push: inline-script brace/paren balance (PowerShell counter) + every
   getElementById target exists. NO apostrophes in JS comments — the counter treats `'` as a
   string delimiter and lies (see v5 entry).
-- Current HEAD: `5575924` (log checkpoint; code HEAD `5bf94a1` v8.3). Live question: last entry below.
+- Current HEAD: `4211140` (log checkpoint series; code HEAD `5bf94a1` v8.3). Live question: last entry below.
 - (HEAD moves fast — `git log --oneline -3` is truth; this line updated with log commits.)
 
 ## Retro (reconstructed 2026-09-16 from prior sessions)
