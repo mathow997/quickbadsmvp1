@@ -364,6 +364,19 @@ Entries stay chronological; the live question is always the last entry.
   current build; the 12615-box screenshot was a stale pre-clamp tab).
 - Standing by for A0 robe test before any further code.
 
+## 2026-09-17 — A01 vector revival via crop fix (no code change, verified by user runs)
+
+- A01 dump header: crop [-1683.72,-1190.52] — the ENTIRE prior A01 mystery (fills/pairs/planes
+  all off-page junk, 0 usable planes, bed never assembling) was this offset shifting the parse
+  off-page. Subtracting it in P() snapped everything on: overlay rings the apartment, beds
+  detect at (55,36%), auto-seeds + [vec] fits, verdicts correct (FAIL 3000×3355 and COMPLIANT
+  3000×4150 on successive clicks).
+- FH dump header: crop [0,0] rot 0 — no shift there; FH off-page content is genuinely off-page
+  (bleed/second copy). But latest FH overlay screenshot shows corners/planes/yellow ON the
+  apartment — vector evidence exists there too. FH auto/click outcome pending one autoMsg line.
+- Lesson: sheet framing (crop/bleed/second copies) varies per PDF more than wall styles do.
+  Page-bounds scoping + enclosure filtering carry more weight than new detectors.
+
 ## 2026-09-17 — v6.4: multi-threshold rays, fallback clamp, fit gates (built, pushed)
 
 - FH autoMsg `[T1446 B- L- R1552mm]` showed rays working but half-blind: near green walls missed,
