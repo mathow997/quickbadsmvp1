@@ -464,4 +464,14 @@ Entries stay chronological; the live question is always the last entry.
 - Root URL served README (Pages Jekyll default, no index.html) instead of the app.
   Added index.html meta-refresh → bads-stage2.html. Verify after deploy propagates.
 
+## 2026-09-17 — v8.3: Fake-it mode replaces presenter (built, pushed)
+
+- Present mode only hid diagnostics — not worth it. New: 🎭 Fake it button (`?fake`) makes the
+  demo deterministic: sample clicks + auto-measure load pre-verified boxes from
+  `samples/expected/<sample>.json` (scale-guarded) instead of detecting; flagged on screen as
+  on-rails. Uploads, bedcount, evidence, inspector, expected-list, overlay toggle, copy button
+  all hide in fake mode; click tools stay.
+- Authoring = Export JSON → rename → drop in samples/expected/ → push (README documents it).
+  User authors the 3 exhibits; loader + flag built here.
+
 
