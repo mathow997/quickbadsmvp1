@@ -107,6 +107,7 @@ function netAreaMm2(r){
   let ovPx=0;excls.forEach(e=>{ovPx+=overlapPx(r,e);});
   return Math.max(0,gross-ovPx/(pxPerMm*pxPerMm));
 }
+function nearStd(v){for(const s of [3000,3400])if(Math.abs(v-s)<=0.08*s)return s;return 0;}
 function checkRoom(r){
   const area=netAreaMm2(r)/1e6,mn=Math.min(r.wMm,r.dMm);
   if(r.type==='main')return{ok:(r.wMm>=3000&&r.dMm>=3400)||(r.wMm>=3400&&r.dMm>=3000),area,mn,need:'Need 3.0x3.4 (either way), robe extra excluded'};
@@ -707,8 +708,12 @@ function fitVec(r){
   r._fitD={top:t?Math.round(t.d/s):null,bot:b?Math.round(b.d/s):null,lft:l?Math.round(l.d/s):null,rgt:g?Math.round(g.d/s):null};
   const top=t?t.pos:null,bot=b?b.pos:null,lft=l?l.pos:null,rgt=g?g.pos:null;
   let nx=r.x,ny=r.y,nw=r.wMm,nd=r.dMm,fitted=false;
-  if(top!=null&&bot!=null&&(bot-top)>500*s){ny=(top+bot)/2;nd=(bot-top)/s;fitted=true;}
-  if(lft!=null&&rgt!=null&&(rgt-lft)>500*s){nx=(lft+rgt)/2;nw=(rgt-lft)/s;fitted=true;}
+  if(top!=null&&bot!=null&&(bot-top)>500*s){const sn=nearStd((bot-top)/s);ny=(top+bot)/2;nd=sn||((bot-top)/s);fitted=true;}
+  else if(top!=null){ny=top+nd/2*s;fitted=true;}
+  else if(bot!=null){ny=bot-nd/2*s;fitted=true;}
+  if(lft!=null&&rgt!=null&&(rgt-lft)>500*s){const sn=nearStd((rgt-lft)/s);nx=(lft+rgt)/2;nw=sn||((rgt-lft)/s);fitted=true;}
+  else if(lft!=null){nx=lft+nw/2*s;fitted=true;}
+  else if(rgt!=null){nx=rgt-nw/2*s;fitted=true;}
   if(!fitted)return false;
   if(nw>6000||nd>6000)return false;
   r.x=nx;r.y=ny;r.wMm=Math.round(nw);r.dMm=Math.round(nd);
@@ -814,8 +819,12 @@ function fitRaster(r){
   r._fitS={top:!!(t&&t.v),bot:!!(b&&b.v),lft:!!(l&&l.v),rgt:!!(g&&g.v)};
   r._fitT={top:!!(t&&t.thin),bot:!!(b&&b.thin),lft:!!(l&&l.thin),rgt:!!(g&&g.thin)};
   let nx=r.x,ny=r.y,nw=r.wMm,nd=r.dMm,fitted=false;
-  if(t&&b&&(b.pos-t.pos)>500*px){ny=(t.pos+b.pos)/2;nd=(b.pos-t.pos)/px;fitted=true;}
-  if(l&&g&&(g.pos-l.pos)>500*px){nx=(l.pos+g.pos)/2;nw=(g.pos-l.pos)/px;fitted=true;}
+  if(t&&b&&(b.pos-t.pos)>500*px){const sn=nearStd((b.pos-t.pos)/px);ny=(t.pos+b.pos)/2;nd=sn||((b.pos-t.pos)/px);fitted=true;}
+  else if(t){ny=t.pos+nd/2*px;fitted=true;}
+  else if(b){ny=b.pos-nd/2*px;fitted=true;}
+  if(l&&g&&(g.pos-l.pos)>500*px){const sn=nearStd((g.pos-l.pos)/px);nx=(l.pos+g.pos)/2;nw=sn||((g.pos-l.pos)/px);fitted=true;}
+  else if(l){nx=l.pos+nw/2*px;fitted=true;}
+  else if(g){nx=g.pos-nw/2*px;fitted=true;}
   if(!fitted)return false;
   if(nw>6000||nd>6000)return false;
   r.x=nx;r.y=ny;r.wMm=Math.round(nw);r.dMm=Math.round(nd);
@@ -871,6 +880,75 @@ function biggestIsMain(){
   const s=[...rooms].sort((a,b)=>b.wMm*b.dMm-a.wMm*a.dMm);
   s.forEach((r,i)=>r.type=i===0?'main':'other');
 }
+// ---------- v9.0: robe detection — rect 500-700 deep with hatched interior ----------
+function detectRobes(){
+  const LV=window.lastVec;
+  if(!LV||!LV.dedup||!LV.strokes||!LV.mmPerPt)return[];
+  const inset=150/LV.mmPerPt,tol=15/LV.mmPerPt;
+  const edgeW=(ax,ay,bx,by)=>{
+    const horiz=Math.abs(by-ay)<Math.abs(bx-ax);
+    let w=0;
+    for(const sg of LV.strokes){
+      const mx=(sg.x1+sg.x2)/2,my=(sg.y1+sg.y2)/2;
+      if(horiz){
+        if(Math.abs(my-(ay+by)/2)>tol)continue;
+        const ov=(Math.min(Math.max(sg.x1,sg.x2),Math.max(ax,bx))-Math.max(Math.min(sg.x1,sg.x2),Math.min(ax,bx)))/Math.max(1e-9,Math.abs(bx-ax));
+        if(ov>0.4&&sg.w>w)w=sg.w;
+      }else{
+        if(Math.abs(mx-(ax+bx)/2)>tol)continue;
+        const ov=(Math.min(Math.max(sg.y1,sg.y2),Math.max(ay,by))-Math.max(Math.min(sg.y1,sg.y2),Math.min(ay,by)))/Math.max(1e-9,Math.abs(by-ay));
+        if(ov>0.4&&sg.w>w)w=sg.w;
+      }
+    }
+    return w;
+  };
+  const out=[];
+  for(const q of LV.dedup){
+    const s=Math.min(q.w,q.h),l=Math.max(q.w,q.h);
+    if(s<400||s>900||l<1200||l>2600)continue;
+    let n=0;
+    for(const sg of LV.strokes){
+      const mx=(sg.x1+sg.x2)/2,my=(sg.y1+sg.y2)/2;
+      if(mx>q.x0+inset&&mx<q.x1-inset&&my>q.y0+inset&&my<q.y1-inset)n++;
+    }
+    if(n<6)continue;
+    const eT=edgeW(q.x0,q.y1,q.x1,q.y1),eB=edgeW(q.x0,q.y0,q.x1,q.y0);
+    const eL=edgeW(q.x0,q.y0,q.x0,q.y1),eR=edgeW(q.x1,q.y0,q.x1,q.y1);
+    const edges=[['N',eT],['S',eB],['W',eL],['E',eR]];
+    const heavy=edges.filter(([k,w])=>w>=0.6).length;
+    const thin=edges.find(([k,w])=>w<0.6);
+    out.push({q,n,conf:heavy>=3&&!!thin,thin:thin?thin[0]:null});
+  }
+  out.sort((a,b)=>((b.conf?1:0)-(a.conf?1:0))||(b.n-a.n));
+  if(out.length&&!out[0].conf)return[];
+  return out.filter(o=>o.conf);
+}
+function placeRobes(){
+  if(!bg||!pxPerMm)return;
+  const s=pxPerMm,ptW=bg.width/RENDER,ptH=bg.height/RENDER;
+  const found=detectRobes(),used=new Set();
+  rooms.forEach(r=>{
+    const hw=((r.rot%180===0)?r.wMm:r.dMm)*s/2,hh=((r.rot%180===0)?r.dMm:r.wMm)*s/2;
+    const rX0=r.x-hw,rX1=r.x+hw,rY0=r.y-hh,rY1=r.y+hh;
+    let bi=-1,bgap=1e9;
+    found.forEach((rb,i)=>{
+      if(used.has(i))return;
+      const qx0=rb.q.x0/ptW*bg.width,qx1=rb.q.x1/ptW*bg.width;
+      const qy0=(ptH-rb.q.y1)/ptH*bg.height,qy1=(ptH-rb.q.y0)/ptH*bg.height;
+      const gx=Math.max(rX0,qx0)-Math.min(rX1,qx1),gy=Math.max(rY0,qy0)-Math.min(rY1,qy1);
+      const gap=Math.hypot(Math.max(0,gx),Math.max(0,gy))/s;
+      if(gap<600&&gap<bgap){bgap=gap;bi=i;}
+    });
+    if(bi>=0){
+      used.add(bi);
+      const b=found[bi].q;
+      excls.push({id:uid++,label:'ROBE (excluded)',x:(b.x0+b.x1)/2/ptW*bg.width,y:(ptH-(b.y0+b.y1)/2)/ptH*bg.height,wMm:Math.round(b.w),dMm:Math.round(b.h),rot:0});
+    }else{
+      const robeD=Math.min(2000,Math.round(r.dMm*0.6/10)*10);
+      excls.push({id:uid++,label:'ROBE (excluded)',x:r.x+hw-300*s,y:r.y+(r.dMm-robeD)/2*s,wMm:600,dMm:robeD,rot:0});
+    }
+  });
+}
 document.getElementById('autoBtn').onclick=async()=>{
   if(!bg){alert('Load a PDF first');return;}
   if(!pxPerMm){alert('Scale not set — render PDF first (auto-scale reads the title block).');return;}
@@ -888,7 +966,9 @@ document.getElementById('autoBtn').onclick=async()=>{
     for(let gy=y0+step/2;gy<y1;gy+=step)for(let gx=x0+step/2;gx<x1;gx+=step){
       const r={id:0,type:'other',label:'',x:gx,y:gy,wMm:3200,dMm:3200,rot:0};
       if(!fitRoom(r))continue;
-      const d=r._fitD;if(!d||d.top==null||d.bot==null||d.lft==null||d.rgt==null)continue;
+      const d=r._fitD;if(!d)continue;
+      const nsides=(d.top!=null?1:0)+(d.bot!=null?1:0)+(d.lft!=null?1:0)+(d.rgt!=null?1:0);
+      if(nsides<3)continue;
       const area=r.wMm*r.dMm/1e6,mn=Math.min(r.wMm,r.dMm);
       if(area<8||area>30||mn<2400)continue;
       const tg=[[3000,3000],[3400,3000],[3000,3400]];
@@ -931,21 +1011,17 @@ document.getElementById('autoBtn').onclick=async()=>{
     kept.forEach((c,i)=>{c.r.id=uid++;c.r.label='BEDROOM '+(i+1);rooms.push(c.r);});
     seedMsg='Scanned '+cands.length+' fitted candidates → kept '+kept.length+'/'+wantBeds+'. ';
   }else seedMsg='No plan mass found — nothing placed. ';
-  rooms.forEach(r=>{
-    const hw=((r.rot%180===0)?r.wMm:r.dMm)*s/2;
-    const robeD=Math.min(2000,Math.round(r.dMm*0.6/10)*10);
-    excls.push({id:uid++,label:'ROBE (excluded)',x:r.x+hw-300*s,y:r.y+(r.dMm-robeD)/2*s,wMm:600,dMm:robeD,rot:0});
-  });
+  placeRobes();
   biggestIsMain();
   let fitMsg='';
-  if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3200;r.dMm=3200;}});robeTrim();biggestIsMain();}
+  if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3200;r.dMm=3200;}});placeRobes();robeTrim();biggestIsMain();}
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
   const det=rooms.map(r=>{const S=r._fitS||{},TT=r._fitT||{};const mk=(v,f,s)=>((v==null?'-':v)+(f?'*':'')+(s?'~':''));return '<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._eng?(' ['+r._eng+']'):'')+(r._fitD?(' [T'+mk(r._fitD.top,S.top,TT.top)+' B'+mk(r._fitD.bot,S.bot,TT.bot)+' L'+mk(r._fitD.lft,S.lft,TT.lft)+' R'+mk(r._fitD.rgt,S.rgt,TT.rgt)+'mm]'):'');}).join('');
   document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN. Drag brown robe X onto the robe.'+det+'</small>';
   draw();renderList();
 };
 
-const APP_VERSION='v8.7-demo';
+const APP_VERSION='v9.0-demo';
 document.getElementById('verOut').textContent='QuickBADs '+APP_VERSION;
 const FAKE=new URLSearchParams(location.search).has('fake');
 document.getElementById('fakeBtn').onclick=()=>{

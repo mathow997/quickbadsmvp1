@@ -499,29 +499,9 @@ Entries stay chronological; the live question is always the last entry.
 - User correction: the FH monster box sits in the LIVING room, not an oversized bedroom —
   room identity (not size) is the miss. Bedrooms need locating, not just fitting.
 
-## 2026-09-17 — session status checkpoint (no code change)
-
-- HEAD: `5bf94a1` (v8.3 fake-it). Tree clean. Site live with v8.0 UI verified (samples, diagnostics
-  blob, A01 auto `3300×3400 [vec]` symmetric fit, robe subtraction in net).
-- Pending with USER: verify fake-it live (★ message on all 3 samples). Expected-output PDFs.
-  Present-mode run. (Exhibits authored + pushed as v8.4; FH auto retest folded into fake-it.)
-- Pending in CODE: glass-slider wall evidence (FH east side never fits — R-side misses block every
-  auto/click fit there); robe auto-detection (manual click + drag stands in); SVG vector display
-  replacing raster canvas; Revit-plugin mapping notes.
-- UI follows the user mockup, overriding parts of the cleanup plan: wallsrc select + all four
-  checkboxes kept; samples grid is 5 columns (SAMPLES array holds 3, more slots when files added);
-  expected-outputs section doubles as the flagged on-rails backup.
-- Rule restated: log every call/path change same-session; entries chronological, newest last;
-  no apostrophes in JS comments (brace-counter lies); root/repo copies synced on every commit.
-
-## 2026-09-17 — bedroom identity rules (user spec, not yet built)
+## 2026-09-17 — bedroom identity rules (user spec, basis for v8.7)
 
 - Bedrooms are ALWAYS on the plan edge; are 3.0×3.0 or 3.4×3.0 (±5%); have robes.
-  (Current scan scores area≈12 + squareness only — no edge/size-band/robe terms, which is why
-  living rooms win.)
-- Proposed scoring: size-band match (min rel-err vs 3.0×3.0 / 3.4×3.0 both rotations) +
-  edge bonus (box near plan-bbox border) + robe-adjacency bonus (robe-like rect within 400mm).
-  Replaces area+aspect terms.
 - AI-live to look at plans: feasible (vision API proposes regions, geometry still fits walls),
   two shapes — bring-your-own-key direct browser call (works on static Pages, key stays with
   user) vs key-holding proxy backend (infra + cost + client-data-leaves-practice privacy flag).
@@ -535,5 +515,35 @@ Entries stay chronological; the live question is always the last entry.
   border, ≤2000mm ramp, +500) + robe adjacency (robe-like 400–900 × 1200–2600 rect within
   400mm, +400, either orientation). Replaces area+aspect terms; AI-live paused.
 - APP_VERSION bumped to v8.7-demo (footer + diagnostics blob).
+
+## 2026-09-17 — v8.8: standard-size inscription (built, pushed)
+
+- User guarantee: rooms ARE 3.0×3.0 / 3.4×3.0 — anything else is 99% wrong. So boxes no longer
+  grow to walls: when a found wall gap matches 3000/3400 within 8%, the box takes the EXACT
+  standard size spanning them. Single-side axes anchor that edge (seed size kept). Glass sides
+  get derived from standards instead of detected — the FH east wall problem sidestepped.
+- Scan filter relaxed 4-side → 3-side (lets glass-side rooms qualify); scoring unchanged
+  (exact sizes score ~zero error, edge + robe bonuses decide).
+- Fake-it untouched.
+
+## 2026-09-17 — v9.0: robe detection via 3-thick-1-thin rule (built, pushed)
+
+- Robe anatomy (user spec from marked-up screenshots): 3 thick walls + 1 thin door face +
+  thin interior rails. Detector: robe-band rects (400–900 × 1200–2600) scored by interior
+  hatch count (≥6) AND edge conformity (≥3 faces ≥0.6pt, ≥1 thin face). Non-conforming sheets
+  get no auto robe (strict beats legend-style false positives); default corner X stands in.
+- Thin face = doors = room side (recorded for future trim orientation).
+
+## 2026-09-17 — session status checkpoint (no code change)
+
+- Tree clean; code HEAD = latest v9.x per `git log`. Site live with v8.0 UI verified (samples,
+  diagnostics blob, A01 auto symmetric fit, robe math in net).
+- Pending with USER: verify fake-it live (★ message on all 3 samples). Expected-output PDFs.
+- Pending in CODE: glass-slider wall evidence (FH east side); robe trim orientation via thin
+  face; SVG vector display replacing raster canvas; Revit-plugin mapping notes.
+- UI follows the user mockup: wallsrc select + all four checkboxes kept; samples grid 5 cols;
+  expected-outputs section doubles as flagged on-rails backup.
+- Rule restated: log every call/path change same-session; entries chronological, newest last;
+  no apostrophes in JS comments (brace-counter lies); root/repo copies synced on every commit.
 
 
