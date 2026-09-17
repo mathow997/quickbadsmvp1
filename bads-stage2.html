@@ -869,8 +869,11 @@ function robeTrim(){
         if(q[0]<ex0)ex0=q[0];if(q[0]>ex1)ex1=q[0];if(q[1]<ey0)ey0=q[1];if(q[1]>ey1)ey1=q[1];
       });
       const ccx=(ex0+ex1)/2,ccy=(ey0+ey1)/2;
-      if(Math.abs(ccx)>=hw||Math.abs(ccy)>=hh)return; // robe centre must be inside room
-      if(Math.min(x1,ex1)-Math.max(x0,ex0)<=0||Math.min(y1,ey1)-Math.max(y0,ey0)<=0)return;
+      const ovW=Math.min(x1,ex1)-Math.max(x0,ex0),ovH=Math.min(y1,ey1)-Math.max(y0,ey0);
+      if(ovW<=0||ovH<=0)return;
+      const centreIn=Math.abs(ccx)<hw&&Math.abs(ccy)<hh;
+      const xArea=(ex1-ex0)*(ey1-ey0);
+      if(!centreIn&&(ovW*ovH)/(xArea||1)<0.4)return; // need centre inside or substantial overlap
       const opts=[];
       if(ccx<0)opts.push([ex1,x1,y0,y1]);else opts.push([x0,ex0,y0,y1]);
       if(ccy<0)opts.push([x0,x1,ey1,y1]);else opts.push([x0,x1,y0,ey0]);
@@ -1048,7 +1051,7 @@ document.getElementById('autoBtn').onclick=async()=>{
   draw();renderList();
 };
 
-const APP_VERSION='v9.2-demo';
+const APP_VERSION='v9.3-demo';
 document.getElementById('verOut').textContent='QuickBADs '+APP_VERSION;
 const FAKE=new URLSearchParams(location.search).has('fake');
 document.getElementById('fakeBtn').onclick=()=>{
@@ -1167,7 +1170,16 @@ async function seedBed(p){
   const r={id:uid++,type:'other',label:'BEDROOM',x:p.x,y:p.y,wMm:3200,dMm:3200,rot:0};
   rooms.push(r);
   const ok=fitRoom(r);
-  placeRobes([r]);robeTrim();biggestIsMain();
+  const s0=pxPerMm,hw0=pxSizeW(r)/2,hh0=pxSizeH(r)/2;
+  const hasUserRobe=excls.some(e=>{
+    if(e.auto===true)return false;
+    const ew=pxSizeW(e)/2,eh=pxSizeH(e)/2;
+    const gx=Math.max(r.x-hw0,e.x-ew)-Math.min(r.x+hw0,e.x+ew);
+    const gy=Math.max(r.y-hh0,e.y-eh)-Math.min(r.y+hh0,e.y+eh);
+    return Math.hypot(Math.max(0,gx),Math.max(0,gy))/s0<600;
+  });
+  if(!hasUserRobe)placeRobes([r]);
+  robeTrim();biggestIsMain();
   sel={kind:'room',ref:r};draw();renderList();
   const d=r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):'';
   document.getElementById('autoMsg').innerHTML='<small>Seeded at click'+(ok?' — fitted to inner wall faces.':' — fit failed, drag edges.')+(r._eng?(' ['+r._eng+']'):'')+d+'</small>';
@@ -1177,7 +1189,8 @@ function seedRobe(p){
   seedRobeMode=false;document.getElementById('seedRobeBtn').textContent='⊕ Click robe…';
   if(!bg||!pxPerMm){alert('Load a PDF first');return;}
   const e={id:uid++,auto:false,label:'ROBE (excluded)',x:p.x,y:p.y,wMm:600,dMm:1800,rot:0};
-  excls.push(e);sel={kind:'excl',ref:e};draw();renderList();
+  excls.push(e);robeTrim();biggestIsMain();
+  sel={kind:'excl',ref:e};draw();renderList();
   document.getElementById('autoMsg').innerHTML='<small>Robe exclusion placed — drag edges onto the robe. Net area excludes overlap. Never exported.</small>';
 }
 
