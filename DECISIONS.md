@@ -355,6 +355,15 @@ Entries stay chronological; the live question is always the last entry.
 - Confirmed from screenshots: crop fix revived FH beds (green on bed); A01 fits on walls.
   FH auto/fit outcome still needs one autoMsg line ([eng] + sides).
 
+## 2026-09-17 — FH evidence: horizontals lock, verticals intermittent, crop dead (no code change)
+
+- Dump header: crop [0,0] rot 0 — crop-offset hypothesis DEAD. FH vector content genuinely lives
+  off-page; apartment is raster + thin furniture vectors. No mapping bug.
+- FH raster fit `[ras] [T1446 B706 L- R1552mm]` → 5000×2152: top/bottom/right lock, left misses
+  (ensuite door opening on that side is the likely hole). v6.4 clamp held (no 12m monster on
+  current build; the 12615-box screenshot was a stale pre-clamp tab).
+- Standing by for A0 robe test before any further code.
+
 ## 2026-09-17 — v6.4: multi-threshold rays, fallback clamp, fit gates (built, pushed)
 
 - FH autoMsg `[T1446 B- L- R1552mm]` showed rays working but half-blind: near green walls missed,
