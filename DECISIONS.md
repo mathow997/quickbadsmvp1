@@ -534,6 +534,16 @@ Entries stay chronological; the live question is always the last entry.
   get no auto robe (strict beats legend-style false positives); default corner X stands in.
 - Thin face = doors = room side (recorded for future trim orientation).
 
+## 2026-09-17 — v9.1: robe provenance + tiered detection (built, pushed)
+
+- v8.6 trim fired on auto-placed default Xs (never verified), shrinking good boxes below
+  minimums (A01 2800 FAIL). Now: exclusions carry auto:true/false (auto-placed vs clicked or
+  dragged); trim to an auto X that would break type minimums is SKIPPED (falls back to
+  subtraction math); user-confirmed Xs always trim (honest FAIL possible).
+- Detection tiers: conforming (3-thick-1-thin + hatch) first, else hatch-only near rooms
+  (legend excluded by distance). Strict-only excluded thin-only sheets like A01 entirely.
+- 1 robe per bedroom enforced (used-set); corner default kept; autoMsg reports detected count.
+
 ## 2026-09-17 — session status checkpoint (no code change)
 
 - Tree clean; code HEAD = latest v9.x per `git log`. Site live with v8.0 UI verified (samples,

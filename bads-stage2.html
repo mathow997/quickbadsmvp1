@@ -237,10 +237,10 @@ cv.addEventListener('pointermove',e=>{
     let wMm=toMm(nwPx),dMm=toMm(nhPx);
     if(b.rot%180!==0){const t=wMm;wMm=dMm;dMm=t;}
     wMm=Math.round(wMm/10)*10;dMm=Math.round(dMm/10)*10;
-    b.wMm=Math.max(200,wMm);b.dMm=Math.max(200,dMm);b.x=ncx;b.y=ncy;
+    b.wMm=Math.max(200,wMm);b.dMm=Math.max(200,dMm);b.x=ncx;b.y=ncy;b.auto=false;
     draw();renderList();return;
   }
-  if(drag){const p=toImg(e);drag.b.x=p.x-drag.dx;drag.b.y=p.y-drag.dy;draw();}
+  if(drag){const p=toImg(e);drag.b.x=p.x-drag.dx;drag.b.y=p.y-drag.dy;drag.b.auto=false;draw();}
 });
 window.addEventListener('pointerup',()=>{drag=null;resizeH=null;pan=null;});
 cv.addEventListener('contextmenu',e=>e.preventDefault());
@@ -859,7 +859,12 @@ function robeTrim(){
         const w=o[1]-o[0],h=o[3]-o[2];
         if(w>=2000*s&&h>=2000*s&&w*h>bestA){bestA=w*h;best=o;}
       });
-      if(best){x0=best[0];x1=best[1];y0=best[2];y1=best[3];}
+      if(best){
+        const bwPx=best[1]-best[0],bhPx=best[3]-best[2];
+        const bwMm=((r.rot%180)===0?bwPx:bhPx)/s,bhMm=((r.rot%180)===0?bhPx:bwPx)/s;
+        if(e.auto&&!checkRoom({wMm:bwMm,dMm:bhMm,type:r.type}).ok)return; // auto X must not break minimums
+        x0=best[0];x1=best[1];y0=best[2];y1=best[3];
+      }
     });
     const wPx=x1-x0,hPx=y1-y0;
     if(wPx>=2000*s&&hPx>=2000*s&&(x0>-hw||x1<hw||y0>-hh||y1<hh)){
@@ -920,13 +925,13 @@ function detectRobes(){
     out.push({q,n,conf:heavy>=3&&!!thin,thin:thin?thin[0]:null});
   }
   out.sort((a,b)=>((b.conf?1:0)-(a.conf?1:0))||(b.n-a.n));
-  if(out.length&&!out[0].conf)return[];
-  return out.filter(o=>o.conf);
+  return out;
 }
 function placeRobes(){
   if(!bg||!pxPerMm)return;
   const s=pxPerMm,ptW=bg.width/RENDER,ptH=bg.height/RENDER;
   const found=detectRobes(),used=new Set();
+  let detN=0;
   rooms.forEach(r=>{
     const hw=((r.rot%180===0)?r.wMm:r.dMm)*s/2,hh=((r.rot%180===0)?r.dMm:r.wMm)*s/2;
     const rX0=r.x-hw,rX1=r.x+hw,rY0=r.y-hh,rY1=r.y+hh;
@@ -942,12 +947,14 @@ function placeRobes(){
     if(bi>=0){
       used.add(bi);
       const b=found[bi].q;
-      excls.push({id:uid++,label:'ROBE (excluded)',x:(b.x0+b.x1)/2/ptW*bg.width,y:(ptH-(b.y0+b.y1)/2)/ptH*bg.height,wMm:Math.round(b.w),dMm:Math.round(b.h),rot:0});
+      detN++;
+      excls.push({id:uid++,auto:true,label:'ROBE (excluded)',x:(b.x0+b.x1)/2/ptW*bg.width,y:(ptH-(b.y0+b.y1)/2)/ptH*bg.height,wMm:Math.round(b.w),dMm:Math.round(b.h),rot:0});
     }else{
       const robeD=Math.min(2000,Math.round(r.dMm*0.6/10)*10);
-      excls.push({id:uid++,label:'ROBE (excluded)',x:r.x+hw-300*s,y:r.y+(r.dMm-robeD)/2*s,wMm:600,dMm:robeD,rot:0});
+      excls.push({id:uid++,auto:true,label:'ROBE (excluded)',x:r.x+hw-300*s,y:r.y+(r.dMm-robeD)/2*s,wMm:600,dMm:robeD,rot:0});
     }
   });
+  return detN;
 }
 document.getElementById('autoBtn').onclick=async()=>{
   if(!bg){alert('Load a PDF first');return;}
@@ -1014,14 +1021,14 @@ document.getElementById('autoBtn').onclick=async()=>{
   placeRobes();
   biggestIsMain();
   let fitMsg='';
-  if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3200;r.dMm=3200;}});placeRobes();robeTrim();biggestIsMain();}
+  if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3200;r.dMm=3200;}});const nRobe=placeRobes();robeTrim();biggestIsMain();}
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
   const det=rooms.map(r=>{const S=r._fitS||{},TT=r._fitT||{};const mk=(v,f,s)=>((v==null?'-':v)+(f?'*':'')+(s?'~':''));return '<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._eng?(' ['+r._eng+']'):'')+(r._fitD?(' [T'+mk(r._fitD.top,S.top,TT.top)+' B'+mk(r._fitD.bot,S.bot,TT.bot)+' L'+mk(r._fitD.lft,S.lft,TT.lft)+' R'+mk(r._fitD.rgt,S.rgt,TT.rgt)+'mm]'):'');}).join('');
-  document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN. Drag brown robe X onto the robe.'+det+'</small>';
+  document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN.'+(nRobe?(' '+nRobe+' robe(s) auto-detected.'):' No robes detected — click robe + drag.')+det+'</small>';
   draw();renderList();
 };
 
-const APP_VERSION='v9.0-demo';
+const APP_VERSION='v9.1-demo';
 document.getElementById('verOut').textContent='QuickBADs '+APP_VERSION;
 const FAKE=new URLSearchParams(location.search).has('fake');
 document.getElementById('fakeBtn').onclick=()=>{
@@ -1148,7 +1155,7 @@ document.getElementById('seedRobeBtn').onclick=e=>{seedRobeMode=true;e.target.te
 function seedRobe(p){
   seedRobeMode=false;document.getElementById('seedRobeBtn').textContent='⊕ Click robe…';
   if(!bg||!pxPerMm){alert('Load a PDF first');return;}
-  const e={id:uid++,label:'ROBE (excluded)',x:p.x,y:p.y,wMm:600,dMm:1800,rot:0};
+  const e={id:uid++,auto:false,label:'ROBE (excluded)',x:p.x,y:p.y,wMm:600,dMm:1800,rot:0};
   excls.push(e);sel={kind:'excl',ref:e};draw();renderList();
   document.getElementById('autoMsg').innerHTML='<small>Robe exclusion placed — drag edges onto the robe. Net area excludes overlap. Never exported.</small>';
 }
