@@ -332,3 +332,17 @@ Entries stay chronological; the live question is always the last entry.
 
 - Re-applied last nights reverted fix: capture page.view + rotate at render, subtract offset
   in P(), print crop/rot in dump header. If FH positions snap sane, vector path revives.
+
+## 2026-09-17 — v6.2: robe exclusion that works + luminance mask + UI cleanup (built, pushed)
+
+- Robe was placed by page fractions and usually missed: auto-measure now seats one robe X per
+  fitted room (600 deep, centered on room right edge, overlapping so net subtracts); ⊕ Click
+  robe places + selects one anywhere (600×1800 default, drag to fit). Message tells user to
+  drag it on. biggestIsMain runs on every placement (single room = main).
+- Mask threshold per-channel <120 missed green FH walls: now luminance <140. Saturated hues
+  (pure green etc.) were invisible to the old test.
+- Fit reports winning engine per box ([vec]/[ras]) in auto + click messages.
+- UI cleanup: removed auto-scale button (runs on render), + Bedroom (click-seed supersedes),
+  biggest button (auto-categorize), Save/Load (JSON covers it), PNG snapshot (PDF is the
+  deliverable), dead helpers; inspector collapsed in <details open>. Panel now reads
+  load → measure → review → export.

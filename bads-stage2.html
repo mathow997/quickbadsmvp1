@@ -33,25 +33,24 @@
   <input type="file" id="file" accept=".pdf">
   <label>PDF page (default 1)</label>
   <input type="number" id="pageno" value="1" min="1">
-  <div class="row"><button id="loadPdf">Render PDF page</button><button id="autoScale">Auto-scale</button></div>
+  <button id="loadPdf">Render PDF page</button>
   <div id="scaleOut"><small>Scale: not set.</small></div>
   <hr>
+  <details open><summary>Vector inspector (diagnostics)</summary>
   <button id="inspectVec" style="font-weight:700;background:#e3f2fd;border:2px solid #1976d2;padding:10px">🔍 INSPECT VECTORS (what's actually in this PDF)</button>
   <div class="row"><button id="copyVec">📋 Copy inspector output</button></div>
   <div id="vecOut"><small>No inspection yet — render a page, then inspect.</small></div>
+  </details>
   <hr>
   <label>Bedrooms in this apartment</label>
   <select id="bedcount"><option value="1">1 bed</option><option value="2" selected>2 bed</option><option value="3">3 bed</option></select>
   <label>Wall evidence (vector default — switch back anytime)</label>
   <select id="wallsrc"><option value="auto" selected>Auto (vector→raster)</option><option value="vec">Vector planes</option><option value="ras">Raster bands (fallback)</option></select>
   <button id="autoBtn" style="font-weight:700;background:#e8f5e9;border:2px solid #00c853;padding:10px">⚡ AUTO-MEASURE BEDROOMS</button>
-  <small>Auto-places Main + Other + robe exclusions. Then drag edges to snap to wall inner faces.</small>
+  <small>Auto-places bedrooms + robe exclusions. Drag brown robe X onto the robe — net area excludes overlap.</small>
   <div class="row">
     <button id="seedBtn" style="font-weight:700">⊕ Click bedroom…</button>
-  </div>
-  <div class="row">
-    <button id="addRoom">+ Bedroom</button>
-    <button id="addExcl">+ Robe (X)</button>
+    <button id="seedRobeBtn" style="font-weight:700">⊕ Click robe…</button>
   </div>
   <label><input type="checkbox" id="showVec" style="width:auto"> Show evidence overlay (fills red, heavy strokes orange, planes blue, beds green)</label><br>
   <label><input type="checkbox" id="hideExcl" style="width:auto"> Hide robe exclusions (also never exported)</label><br>
@@ -61,13 +60,12 @@
   <div id="rooms"></div>
   <hr>
   <label>Apartment / test name</label><input id="unit" value="apt-01">
-  <div class="row"><button id="save">Save</button><button id="load">Load</button></div>
   <div class="row"><button id="expJson">Export JSON</button><button id="impJson">Import JSON</button></div>
   <input type="file" id="jsonFile" accept=".json" style="display:none">
   <hr>
   <div class="row"><button id="zin">Zoom +</button><button id="zout">Zoom −</button><button id="reset">Reset</button></div>
   <small>Pan: middle-drag / space-drag / right-drag. Wheel = zoom to cursor. Drag inside = move. Drag square handles = resize edge.</small>
-  <div class="row"><button id="exportPng">PNG snapshot</button><button id="exportPdf">Export PDF (vectors)</button></div>
+  <button id="exportPdf">Export PDF (vectors)</button>
   <button id="clear">Clear all</button>
   <div id="info"></div>
   <div id="autoMsg"><small></small></div>
@@ -184,9 +182,9 @@ function hitAll(p){
 }
 function hitTest(p){const h=hitAll(p);return h.length?h[h.length-1]:null;}
 let cycleIdx=0,lastClick={x:0,y:0,t:0};
-let drag=null,resizeH=null,pan=null,spaceDown=false,seedMode=false;
+let drag=null,resizeH=null,pan=null,spaceDown=false,seedMode=false,seedRobeMode=false;
 window.addEventListener('keydown',e=>{
-  if(e.key==='Escape'){seedMode=false;document.getElementById('seedBtn').textContent='⊕ Click bedroom…';}
+  if(e.key==='Escape'){seedMode=false;seedRobeMode=false;document.getElementById('seedBtn').textContent='⊕ Click bedroom…';document.getElementById('seedRobeBtn').textContent='⊕ Click robe…';}
   if(e.code==='Space')spaceDown=true;
 });
 window.addEventListener('keyup',e=>{if(e.code==='Space')spaceDown=false;});
@@ -195,6 +193,7 @@ cv.addEventListener('pointerdown',e=>{
   const p=toImg(e);
   if(e.button===1||e.button===2||spaceDown){pan={sx:e.clientX,sy:e.clientY,ox:view.ox,oy:view.oy};return;}
   if(seedMode&&e.button===0){seedBed(p);return;}
+  if(seedRobeMode&&e.button===0){seedRobe(p);return;}
   const h=hitHandle(e);
   if(h&&sel){const s=pxPerMm||0.5;resizeH={h,b:sel.ref,s};return;}
   const hits=hitAll(p);
@@ -266,7 +265,6 @@ async function autoScaleFromFooter(){
     draw();renderList();
   }catch(err){updateScale('Auto-scale failed — check the title block scale.');}
 }
-document.getElementById('autoScale').onclick=autoScaleFromFooter;
 function updateScale(msg){
   document.getElementById('scaleOut').innerHTML=pxPerMm?'<small class=ok>Scale: '+pxPerMm.toFixed(4)+' px/mm (1:'+autoDenom+'). '+ (msg||'') +'</small>':'<small class=warn>Scale: not set — load a PDF first</small>';
 }
@@ -668,9 +666,12 @@ function drawVec(){
 // ---------- v4: wall-fit — grow boxes to nearest inner-face planes ----------
 function fitRoom(r){
   const src=(document.getElementById('wallsrc')||{value:'auto'}).value||'auto';
-  if(src==='ras')return fitRaster(r);
-  if(src==='vec')return fitVec(r);
-  return fitVec(r)||fitRaster(r);
+  r._eng=null;
+  if(src==='ras'){if(fitRaster(r)){r._eng='ras';return true;}return false;}
+  if(src==='vec'){if(fitVec(r)){r._eng='vec';return true;}return false;}
+  if(fitVec(r)){r._eng='vec';return true;}
+  if(fitRaster(r)){r._eng='ras';return true;}
+  return false;
 }
 function fitVec(r){
   const LV=window.lastVec;
@@ -718,7 +719,7 @@ function wallMask(){
   const c=off.getContext('2d',{willReadFrequently:true});
   c.drawImage(bg,0,0,ow,oh);
   const d=c.getImageData(0,0,ow,oh).data,m=new Uint8Array(ow*oh);
-  for(let i=0;i<ow*oh;i++){const j=i*4;if(d[j]<120&&d[j+1]<120&&d[j+2]<120)m[i]=1;}
+  for(let i=0;i<ow*oh;i++){const j=i*4;if(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]<140)m[i]=1;}
   const gv=document.createElement('canvas');gv.width=ow;gv.height=oh;
   const gc=gv.getContext('2d'),gi=gc.createImageData(ow,oh);
   for(let i=0;i<ow*oh;i++){if(m[i]){gi.data[i*4+1]=200;gi.data[i*4+3]=255;}}
@@ -763,9 +764,10 @@ function fitAll(silent){let n=0;rooms.forEach(r=>{if(fitRoom(r))n++;});if(!silen
 
 // ---------- bedrooms-only auto-measure (no units: one apartment per PDF) ----------
 function mkRoom(type,label,wMm,dMm,fx,fy){return{id:uid++,type,label,x:bg.width*fx,y:bg.height*fy,wMm,dMm,rot:0};}
-function mkExcl(label,wMm,dMm,fx,fy){return{id:uid++,label,x:bg.width*fx,y:bg.height*fy,wMm,dMm,rot:0};}
+
 function biggestIsMain(){
-  if(rooms.length<2)return;
+  if(!rooms.length)return;
+  if(rooms.length===1){rooms[0].type='main';return;}
   const s=[...rooms].sort((a,b)=>b.wMm*b.dMm-a.wMm*a.dMm);
   s.forEach((r,i)=>r.type=i===0?'main':'other');
 }
@@ -778,7 +780,6 @@ document.getElementById('autoBtn').onclick=async()=>{
   const W=bg.width,H=bg.height,s=pxPerMm;
   rooms=[];excls=[];sel=null;
   const R=(type,label,wf,hf,fx,fy)=>({id:uid++,type,label,x:W*fx,y:H*fy,wMm:W*wf/s,dMm:H*hf/s,rot:0});
-  const E=(label,wf,hf,fx,fy)=>({id:uid++,label,x:W*fx,y:H*fy,wMm:W*wf/s,dMm:H*hf/s,rot:0});
   const seeds=(window.lastVec&&window.lastVec.beds&&window.lastVec.beds.length)?window.lastVec.beds.slice().sort((a,b)=>b.w*b.h-a.w*a.h).slice(0,3):[];
   let seedMsg='';
   if(seeds.length){
@@ -799,15 +800,16 @@ document.getElementById('autoBtn').onclick=async()=>{
     if(wantBeds===3){rooms.push(R('main','BEDROOM 1',0.20,0.36,0.24,0.55));rooms.push(R('other','BEDROOM 2',0.20,0.36,0.50,0.55));rooms.push(R('other','BEDROOM 3',0.20,0.36,0.76,0.55));}
     seedMsg='No beds detected — placed '+wantBeds+' fallback boxes. ';
   }
-  if(wantBeds===1){excls.push(E('ROBE (excluded)',0.07,0.28,0.60,0.55));}
-  if(wantBeds===2){excls.push(E('ROBE (excluded)',0.06,0.28,0.48,0.55));}
-  if(wantBeds===3){excls.push(E('ROBE (excluded)',0.05,0.28,0.37,0.55));excls.push(E('ROBE (excluded)',0.05,0.28,0.63,0.55));}
+  rooms.forEach(r=>{
+    const hw=((r.rot%180===0)?r.wMm:r.dMm)*s/2;
+    excls.push({id:uid++,label:'ROBE (excluded)',x:r.x+hw-300*s,y:r.y,wMm:600,dMm:Math.min(2000,Math.round(r.dMm*0.6/10)*10),rot:0});
+  });
   biggestIsMain();
   let fitMsg='';
   if(window.lastVec&&window.lastVec.planesH){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';}
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
-  const det=rooms.map(r=>'<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):'')).join('');
-  document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN.'+det+'</small>';
+  const det=rooms.map(r=>'<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._eng?(' ['+r._eng+']'):'')+(r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):'')).join('');
+  document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN. Drag brown robe X onto the robe.'+det+'</small>';
   draw();renderList();
 };
 
@@ -815,9 +817,8 @@ document.getElementById('autoBtn').onclick=async()=>{
 function renderList(){
   const el=document.getElementById('rooms');el.innerHTML='';
   const bc=document.createElement('div');bc.className='row';
-  const bm=document.createElement('button');bm.textContent='Biggest bedroom = MAIN';bm.onclick=()=>{biggestIsMain();draw();renderList();};
   const bf=document.createElement('button');bf.textContent='Fit to walls';bf.onclick=()=>{const n=fitAll();document.getElementById('autoMsg').innerHTML='<small>Fitted '+n+'/'+rooms.length+' boxes to inner wall faces.</small>';};
-  bc.appendChild(bm);bc.appendChild(bf);el.appendChild(bc);
+  bc.appendChild(bf);el.appendChild(bc);
   rooms.forEach((r,i)=>{
     const c=checkRoom(r);
     const d=document.createElement('div');d.className='roomrow';
@@ -853,21 +854,21 @@ async function seedBed(p){
   if(!window.lastVec||window.lastVecKey!==key){await runVecV2(document.getElementById('vecOut'));}
   const r={id:uid++,type:'other',label:'BEDROOM',x:p.x,y:p.y,wMm:3200,dMm:3200,rot:0};
   rooms.push(r);
-  const ok=window.lastVec&&window.lastVec.planesH?fitRoom(r):false;
+  const ok=fitRoom(r);
+  biggestIsMain();
   sel={kind:'room',ref:r};draw();renderList();
   const d=r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):'';
-  document.getElementById('autoMsg').innerHTML='<small>Seeded at click'+(ok?' — fitted to inner wall faces.':' — fit failed, drag edges.')+d+'</small>';
+  document.getElementById('autoMsg').innerHTML='<small>Seeded at click'+(ok?' — fitted to inner wall faces.':' — fit failed, drag edges.')+(r._eng?(' ['+r._eng+']'):'')+d+'</small>';
 }
-document.getElementById('addRoom').onclick=()=>{
-  if(!bg){alert('Load plan first');return;}
-  const r={id:uid++,type:'other',label:'BEDROOM',x:bg.width/2,y:bg.height/2,wMm:3200,dMm:3000,rot:0};
-  rooms.push(r);sel={kind:'room',ref:r};draw();renderList();
-};
-document.getElementById('addExcl').onclick=()=>{
-  if(!bg){alert('Load plan first');return;}
-  const e={id:uid++,label:'ROBE (excluded)',x:bg.width/2,y:bg.height/2,wMm:700,dMm:1800,rot:0};
+document.getElementById('seedRobeBtn').onclick=e=>{seedRobeMode=true;e.target.textContent='● Click the robe… (Esc cancels)';};
+function seedRobe(p){
+  seedRobeMode=false;document.getElementById('seedRobeBtn').textContent='⊕ Click robe…';
+  if(!bg||!pxPerMm){alert('Load a PDF first');return;}
+  const e={id:uid++,label:'ROBE (excluded)',x:p.x,y:p.y,wMm:600,dMm:1800,rot:0};
   excls.push(e);sel={kind:'excl',ref:e};draw();renderList();
-};
+  document.getElementById('autoMsg').innerHTML='<small>Robe exclusion placed — drag edges onto the robe. Net area excludes overlap. Never exported.</small>';
+}
+
 document.getElementById('showVec').onchange=draw;
 document.getElementById('wallsrc').onchange=e=>{try{localStorage.setItem('bads-wallsrc',e.target.value);}catch(_){}};
 try{const _w=localStorage.getItem('bads-wallsrc');if(_w)document.getElementById('wallsrc').value=_w;}catch(_){}
@@ -877,8 +878,7 @@ document.getElementById('showIds').onchange=draw;
 function storeKey(){return 'bads2-'+(document.getElementById('unit').value||'unit');}
 function clean(o){const c={...o};delete c._hPts;return c;}
 function snapshot(){return{unit:document.getElementById('unit').value,denom:autoDenom,pxPerMm,rooms:rooms.map(clean),excls:excls.map(clean)};}
-document.getElementById('save').onclick=()=>{localStorage.setItem(storeKey(),JSON.stringify(snapshot()));alert('Saved '+rooms.length+' bedrooms + '+excls.length+' robes');};
-document.getElementById('load').onclick=()=>{const s=localStorage.getItem(storeKey());if(!s){alert('No save');return;}const o=JSON.parse(s);rooms=(o.rooms||[]).filter(r=>r.type!=='living');excls=o.excls||[];if(o.pxPerMm)pxPerMm=o.pxPerMm;if(o.denom)autoDenom=o.denom;updateScale();sel=rooms[0]?{kind:'room',ref:rooms[0]}:null;draw();renderList();};
+
 document.getElementById('expJson').onclick=()=>{const a=document.createElement('a');a.download=storeKey()+'.json';a.href=URL.createObjectURL(new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'}));a.click();};
 document.getElementById('impJson').onclick=()=>document.getElementById('jsonFile').click();
 document.getElementById('jsonFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const o=JSON.parse(r.result);rooms=(o.rooms||o.boxes||[]).filter(r=>r.type!=='living');excls=o.excls||[];if(o.pxPerMm)pxPerMm=o.pxPerMm;updateScale();draw();renderList();};r.readAsText(f);};
@@ -886,7 +886,7 @@ document.getElementById('zin').onclick=()=>zoomAt(cv.width/2,cv.height/2,1.25);
 document.getElementById('zout').onclick=()=>zoomAt(cv.width/2,cv.height/2,1/1.25);
 document.getElementById('reset').onclick=fitView;
 document.getElementById('clear').onclick=()=>{rooms=[];excls=[];sel=null;draw();renderList();};
-document.getElementById('exportPng').onclick=()=>{const a=document.createElement('a');a.download='bads-stage2.png';a.href=cv.toDataURL();a.click();};
+
 
 // ---------- vector PDF export (original vectors kept, boxes only addition; robes never drawn) ----------
 document.getElementById('exportPdf').onclick=async()=>{
