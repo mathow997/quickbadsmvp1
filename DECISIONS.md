@@ -426,6 +426,13 @@ Entries stay chronological; the live question is always the last entry.
   Rooms are defined as places that fit, not as bed containers.
 - biggestIsMain + room-relative robes + fitAll unchanged downstream.
 
+## 2026-09-17 — v7.0: ratio-based aspect scoring (built, pushed as 4ffc826)
+
+- User-supplied answer key (FH 3400×3000 + robe X on left robe = correct) lost to the monster
+  (4128×4410) because `|w−d|×10` punished 400mm of squareness with −4000. Now
+  `|w/d−1|×500` (weak ratio term); area closeness to 12m² decides. Correct box now outscores
+  monster 3753 → 3348 on the same candidates.
+
 ## 2026-09-17 — v7.0 verdict: monster kept anyway, scoring not the blocker (no code change)
 
 - Same 4128×4410 kept with identical sides: the correct 3400×3000 was never among the 3 fitted
@@ -445,7 +452,11 @@ Entries stay chronological; the live question is always the last entry.
 - Local file:// note: sample fetch needs hosting (Pages, next batch); Upload works everywhere.
 - Next batch: GitHub Pages + README + expected files + test-matrix pass.
 
-- User-supplied answer key (FH 3400×3000 + robe X on left robe = correct) lost to the monster
-  (4128×4410) because `|w−d|×10` punished 400mm of squareness with −4000. Now
-  `|w/d−1|×500` (weak ratio term); area closeness to 12m² decides. Correct box now outscores
-  monster 3753 → 3348 on the same candidates.
+## 2026-09-17 — v8.1: presenter button, dupe fix, bedcount default, README (built, pushed)
+
+- ⛶ Present button in footer (toggles `?present`; hides inspector/expected/overlay/copy UI,
+  becomes ↩ Exit present). The proposed `?present` mode from planning finally exists.
+- Fixed nested duplicate inspector details (v6.2 + v8.0 wrappers collided). Bedcount defaults
+  to 1 bed. README added (run online/local, samples, Pages steps).
+
+
