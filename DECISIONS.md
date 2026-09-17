@@ -433,7 +433,17 @@ Entries stay chronological; the live question is always the last entry.
   wall on FH bedroom east side). Next detector work: glass/track lines as wall evidence.
 - HOLD on code per user — presentation cleanup first.
 
-## 2026-09-17 — v7.0: ratio-based aspect scoring (built, pushed as 4ffc826)
+## 2026-09-17 — v8.0 demo cleanup (built, pushed)
+
+- Title QuickBADs Demo; samples grid (5-col, runtime pdf.js thumbnails, click-to-load) fed by
+  a SAMPLES array; `samples/` holds trial-a01.pdf (57KB) + fh-c-1bed.pdf + fh-c-2.pdf;
+  file/sample loads auto-render + auto-scale + clear old boxes (Render button gone).
+- Removed: auto-scale/Fit/Save/Load/PNG/addRoom/addExcl/biggest buttons, Import JSON,
+  copyVec button, dead helpers. Inspector collapsed in details; single footer Copy
+  diagnostics blob (with build version stamp, also shown in footer).
+- Expected-outputs shell (`samples/expected/` link list, on-rails backup) — files to be added.
+- Local file:// note: sample fetch needs hosting (Pages, next batch); Upload works everywhere.
+- Next batch: GitHub Pages + README + expected files + test-matrix pass.
 
 - User-supplied answer key (FH 3400×3000 + robe X on left robe = correct) lost to the monster
   (4128×4410) because `|w−d|×10` punished 400mm of squareness with −4000. Now

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BADs Stage 2 — Bedrooms (vector-first, solo apartment)</title>
+<title>QuickBADs Demo</title>
 <style>
   body{font-family:system-ui,sans-serif;margin:0;display:flex;height:100vh;font-size:14px}
   #side{flex:0 0 410px;min-width:410px;max-width:410px;padding:14px;border-right:1px solid #ddd;overflow-y:auto;background:#fff;box-sizing:border-box}
@@ -18,27 +18,33 @@
   #vecOut{max-height:260px;overflow-y:auto;background:#f7f7f7;border:1px solid #ddd;padding:6px;margin:6px 0;font-size:12px;white-space:pre-wrap}
   #vecOut table{border-collapse:collapse;width:100%}
   #vecOut td,#vecOut th{border:1px solid #ccc;padding:2px 4px;text-align:left}
+  #samples{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:6px 0}
+  .sample{padding:3px;cursor:pointer;background:#fafafa;border:1px solid #ccc}
+  .sample img{width:100%;display:block;background:#fff;min-height:40px}
+  .sample small{display:block;font-size:10px;color:#333;text-align:center}
+  .sample:disabled{opacity:0.45;cursor:default}
+  #expected a{display:block;margin:2px 0;font-size:13px}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 </head>
 <body>
 <div id="side">
-  <h3>BADs Stage 2 — Bedrooms (solo apartment)</h3>
+  <h3>QuickBADs Demo</h3>
   <small>Load one apartment PDF → <b>Auto-measure bedrooms</b> drops bedroom boxes + robe
   exclusions. Boxes show <b>actual size</b>, dotted guideline style. Robe X = working only,
   never exported. Drag edges to wall faces.</small>
   <hr>
-  <label>Plan file (PDF — vector only)</label>
+  <div id="samples"></div>
+  <label>Select a sample plan or upload your own</label>
   <input type="file" id="file" accept=".pdf">
   <label>PDF page (default 1)</label>
   <input type="number" id="pageno" value="1" min="1">
-  <button id="loadPdf">Render PDF page</button>
   <div id="scaleOut"><small>Scale: not set.</small></div>
   <hr>
   <details open><summary>Vector inspector (diagnostics)</summary>
+  <details><summary>Vector inspector (diagnostics)</summary>
   <button id="inspectVec" style="font-weight:700;background:#e3f2fd;border:2px solid #1976d2;padding:10px">🔍 INSPECT VECTORS (what's actually in this PDF)</button>
-  <div class="row"><button id="copyVec">📋 Copy inspector output</button></div>
   <div id="vecOut"><small>No inspection yet — render a page, then inspect.</small></div>
   </details>
   <hr>
@@ -60,15 +66,21 @@
   <div id="rooms"></div>
   <hr>
   <label>Apartment / test name</label><input id="unit" value="apt-01">
-  <div class="row"><button id="expJson">Export JSON</button><button id="impJson">Import JSON</button></div>
-  <input type="file" id="jsonFile" accept=".json" style="display:none">
+  <button id="expJson">Export JSON</button>
   <hr>
   <div class="row"><button id="zin">Zoom +</button><button id="zout">Zoom −</button><button id="reset">Reset</button></div>
   <small>Pan: middle-drag / space-drag / right-drag. Wheel = zoom to cursor. Drag inside = move. Drag square handles = resize edge.</small>
   <button id="exportPdf">Export PDF (vectors)</button>
   <button id="clear">Clear all</button>
+  <details><summary>Expected outputs (on-rails backup)</summary>
+  <small>Pre-built correct PDFs if the live run stalls. Add files to <code>samples/expected/</code>.</small>
+  <div id="expected"></div>
+  </details>
   <div id="info"></div>
   <div id="autoMsg"><small></small></div>
+  <hr>
+  <div class="row"><button id="copyDiag">📋 Copy diagnostics</button></div>
+  <small id="verOut"></small>
 </div>
 <div id="wrap"><canvas id="c" width="1200" height="800"></canvas></div>
 <script>
@@ -238,8 +250,9 @@ cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientR
 document.getElementById('file').onchange=e=>{
   const f=e.target.files[0];if(!f)return;fileName=f.name;
   if(!/pdf/i.test(f.type)&&!/\.pdf$/i.test(f.name)){alert('Vector-only: load a PDF, not an image.');return;}
-  const r=new FileReader();r.onload=()=>{fileBuf=r.result;renderPdf();};r.readAsArrayBuffer(f);
+  const r=new FileReader();r.onload=()=>{fileBuf=r.result;clearAll();renderPdf();};r.readAsArrayBuffer(f);
 };
+function clearAll(){rooms=[];excls=[];sel=null;window.lastVec=null;draw();renderList();updateScale();}
 async function renderPdf(){
   if(!fileBuf)return;
   const pdf=await pdfjsLib.getDocument({data:fileBuf.slice(0)}).promise;
@@ -252,7 +265,7 @@ async function renderPdf(){
   try{const tc=await page.getTextContent();lastText=tc.items.map(i=>({s:i.str,x:i.transform[4],y:i.transform[5]}));}catch(_){lastText=[];}
   const img=new Image();img.onload=()=>{bg=img;window.lastVec=null;fitView();autoScaleFromFooter();};img.src=tmp.toDataURL();
 }
-document.getElementById('loadPdf').onclick=renderPdf;
+
 async function autoScaleFromFooter(){
   try{
     if(!lastPage||!bg)return;
@@ -270,16 +283,7 @@ function updateScale(msg){
 }
 function fitView(){if(!bg)return;view.s=Math.min(cv.width/bg.width,cv.height/bg.height)*0.95;view.ox=20;view.oy=20;draw();}
 
-document.getElementById('copyVec').onclick=async e=>{
-  const t=document.getElementById('vecOut').innerText||'';
-  const done=()=>{e.target.textContent='✓ Copied';setTimeout(()=>e.target.textContent='📋 Copy inspector output',1500);};
-  try{await navigator.clipboard.writeText(t);done();}
-  catch(_){
-    const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);
-    ta.select();try{document.execCommand('copy');done();}catch(__){alert('Copy failed — select manually.');}
-    ta.remove();
-  }
-};
+
 // ---------- vector inspector: dump what is actually inside the page ----------
 document.getElementById('inspectVec').onclick=async()=>{
   const out=document.getElementById('vecOut');
@@ -873,12 +877,64 @@ document.getElementById('autoBtn').onclick=async()=>{
   draw();renderList();
 };
 
+const APP_VERSION='v8.0-demo';
+document.getElementById('verOut').textContent='QuickBADs '+APP_VERSION;
+const SAMPLES=[
+  {file:'trial-a01.pdf',label:'Trial A01 · 1 bed',beds:1},
+  {file:'fh-c-1bed.pdf',label:'FH C · 1 bed',beds:1},
+  {file:'fh-c-2.pdf',label:'FH C · alt',beds:1},
+];
+const EXPECTED=['trial-a01-BADS.pdf','fh-c-1bed-BADS.pdf','fh-c-2-BADS.pdf'];
+async function buildThumbs(){
+  const grid=document.getElementById('samples');if(!grid)return;grid.innerHTML='';
+  for(const s of SAMPLES){
+    const card=document.createElement('button');card.className='sample';card.title=s.label;
+    const im=document.createElement('img');im.alt=s.label;
+    const cap=document.createElement('small');cap.textContent=s.label;
+    card.appendChild(im);card.appendChild(cap);grid.appendChild(card);
+    card.onclick=()=>loadSample(s);
+    try{
+      const r=await fetch('samples/'+s.file);if(!r.ok)throw 0;
+      const buf=await r.arrayBuffer();s.buf=buf;
+      const pdf=await pdfjsLib.getDocument({data:buf.slice(0)}).promise;
+      const page=await pdf.getPage(1),vp=page.getViewport({scale:0.15});
+      const c=document.createElement('canvas');c.width=Math.max(1,vp.width);c.height=Math.max(1,vp.height);
+      await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+      im.src=c.toDataURL();
+    }catch(_){im.alt=s.label+' (needs hosting or Upload)';card.disabled=true;}
+  }
+  const ex=document.getElementById('expected');if(!ex)return;ex.innerHTML='';
+  for(const f of EXPECTED){
+    try{
+      const r=await fetch('samples/expected/'+f,{method:'HEAD'});if(!r.ok)continue;
+      const a=document.createElement('a');a.href='samples/expected/'+f;a.textContent='✓ '+f;a.target='_blank';ex.appendChild(a);
+    }catch(_){/* missing until user adds it */}
+  }
+}
+async function loadSample(s){
+  try{
+    const buf=s.buf||await(await fetch('samples/'+s.file)).arrayBuffer();
+    fileBuf=buf.slice(0);fileName=s.file;
+    document.getElementById('pageno').value=1;
+    if(s.beds)document.getElementById('bedcount').value=String(s.beds);
+    clearAll();await renderPdf();
+  }catch(_){alert('Could not load sample — check connection, or upload your own PDF.');}
+}
+document.getElementById('copyDiag').onclick=async e=>{
+  const L=['QuickBADs '+APP_VERSION,'file: '+(fileName||'(none)')+' page: '+document.getElementById('pageno').value+' scale: '+(pxPerMm?pxPerMm.toFixed(4)+' px/mm (1:'+autoDenom+')':'unset')];
+  rooms.forEach((r,i)=>{const c=checkRoom(r);L.push('room'+(i+1)+': '+(r.label||r.type)+' '+Math.round(r.wMm)+'x'+Math.round(r.dMm)+'mm '+(netAreaMm2(r)/1e6).toFixed(2)+'m2 '+(c.ok?'PASS':'FAIL')+(r._eng?' ['+r._eng+']':'')+(r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):''));});
+  L.push('exclusions: '+excls.length+' (working only, never exported)');
+  if(window.lastVec){const V=window.lastVec;L.push('parse: '+V.segments+' segs, '+((V.planesH||[]).length+(V.planesV||[]).length)+' planes, '+(V.beds||[]).length+' beds');}
+  const t=L.join('\n');
+  try{await navigator.clipboard.writeText(t);e.target.textContent='✓ Copied';setTimeout(()=>e.target.textContent='📋 Copy diagnostics',1500);}
+  catch(_){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(__){}ta.remove();}
+};
+buildThumbs();
+
 // ---------- side list ----------
 function renderList(){
   const el=document.getElementById('rooms');el.innerHTML='';
-  const bc=document.createElement('div');bc.className='row';
-  const bf=document.createElement('button');bf.textContent='Fit to walls';bf.onclick=()=>{const n=fitAll();document.getElementById('autoMsg').innerHTML='<small>Fitted '+n+'/'+rooms.length+' boxes to inner wall faces.</small>';};
-  bc.appendChild(bf);el.appendChild(bc);
+
   rooms.forEach((r,i)=>{
     const c=checkRoom(r);
     const d=document.createElement('div');d.className='roomrow';
@@ -940,8 +996,7 @@ function clean(o){const c={...o};delete c._hPts;return c;}
 function snapshot(){return{unit:document.getElementById('unit').value,denom:autoDenom,pxPerMm,rooms:rooms.map(clean),excls:excls.map(clean)};}
 
 document.getElementById('expJson').onclick=()=>{const a=document.createElement('a');a.download=storeKey()+'.json';a.href=URL.createObjectURL(new Blob([JSON.stringify(snapshot(),null,2)],{type:'application/json'}));a.click();};
-document.getElementById('impJson').onclick=()=>document.getElementById('jsonFile').click();
-document.getElementById('jsonFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const o=JSON.parse(r.result);rooms=(o.rooms||o.boxes||[]).filter(r=>r.type!=='living');excls=o.excls||[];if(o.pxPerMm)pxPerMm=o.pxPerMm;updateScale();draw();renderList();};r.readAsText(f);};
+
 document.getElementById('zin').onclick=()=>zoomAt(cv.width/2,cv.height/2,1.25);
 document.getElementById('zout').onclick=()=>zoomAt(cv.width/2,cv.height/2,1/1.25);
 document.getElementById('reset').onclick=fitView;
