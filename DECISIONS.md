@@ -403,3 +403,10 @@ Entries stay chronological; the live question is always the last entry.
   largest (the plan; title/legend stay separate). Minimum 100px mass or no bbox.
 - Meta: the Read tool rendered `by0` as `y0`, sending me hunting a typo that did not exist —
   bash output is ground truth for exact-match edits.
+
+## 2026-09-17 — v6.7: vector long-line secondary stops (built, pushed)
+
+- FH `[T564 B1305]` pattern: raster finds horizontals, verticals miss (openings + thin outlines).
+  Where a raster side finds nothing, nearest vector line ≥1500mm crossing the ray now stops it
+  (*-marked in messages). Accepts sofa/table risk on those sides; user drags, message shows it.
+- lastVec.strokes (already stashed since v5.4) feeds it — no re-parse.

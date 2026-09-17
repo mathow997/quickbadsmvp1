@@ -751,7 +751,7 @@ function wallMask(){
 }
 function fitRaster(r){
   if(!bg||!pxPerMm)return false;
-  const WM=wallMask(),s=pxPerMm*WM.k,px=pxPerMm;
+  const WM=wallMask(),s=pxPerMm*WM.k,px=pxPerMm,W=bg.width,H=bg.height;
   const runMin=Math.max(3,Math.round(50*s)),maxR=Math.round(4500*s);
   const cx=Math.round(r.x*WM.k),cy=Math.round(r.y*WM.k);
   const ray=(dx,dy)=>{
@@ -774,8 +774,40 @@ function fitRaster(r){
     }
     return null;
   };
-  const t=ray(0,-1),b=ray(0,1),l=ray(-1,0),g=ray(1,0);
+  let t=ray(0,-1),b=ray(0,1),l=ray(-1,0),g=ray(1,0);
+  const LV=window.lastVec; // v6.7: vector long-line stops where raster found nothing
+  const vstop=(horiz,before)=>{
+    if(!LV||!LV.strokes||!bg||!LV.mmPerPt)return null;
+    const ptW=bg.width/RENDER,ptH=bg.height/RENDER;
+    let best=null,bd=1e18;
+    for(const sg of LV.strokes){
+      if(sg.cu)continue;
+      const dx=sg.x2-sg.x1,dy=sg.y2-sg.y1,len=Math.hypot(dx,dy);
+      if(len*LV.mmPerPt<1500)continue;
+      if(horiz){
+        if(Math.abs(dy)>0.05*len+0.3)continue;
+        const yy=(ptH-(sg.y1+sg.y2)/2)/ptH*H;
+        const x0=Math.min(sg.x1,sg.x2)/ptW*W,x1=Math.max(sg.x1,sg.x2)/ptW*W;
+        if(r.x<x0||r.x>x1)continue;
+        const d=before?(r.y-yy):(yy-r.y);
+        if(d<0||d>4500*px)continue;
+        if(d<bd){bd=d;best={pos:yy,d:d/px,v:1};}
+      }else{
+        if(Math.abs(dx)>0.05*len+0.3)continue;
+        const xx=(sg.x1+sg.x2)/2/ptW*W;
+        const y0=Math.min(sg.y1,sg.y2),y1=Math.max(sg.y1,sg.y2);
+        const yy0=(ptH-y1)/ptH*H,yy1=(ptH-y0)/ptH*H;
+        if(r.y<yy0||r.y>yy1)continue;
+        const d=before?(r.x-xx):(xx-r.x);
+        if(d<0||d>4500*px)continue;
+        if(d<bd){bd=d;best={pos:xx,d:d/px,v:1};}
+      }
+    }
+    return best;
+  };
+  t=t||vstop(true,true);b=b||vstop(true,false);l=l||vstop(false,true);g=g||vstop(false,false);
   r._fitD={top:t?Math.round(t.d):null,bot:b?Math.round(b.d):null,lft:l?Math.round(l.d):null,rgt:g?Math.round(g.d):null};
+  r._fitS={top:!!(t&&t.v),bot:!!(b&&b.v),lft:!!(l&&l.v),rgt:!!(g&&g.v)};
   let nx=r.x,ny=r.y,nw=r.wMm,nd=r.dMm,fitted=false;
   if(t&&b&&(b.pos-t.pos)>500*px){ny=(t.pos+b.pos)/2;nd=(b.pos-t.pos)/px;fitted=true;}
   if(l&&g&&(g.pos-l.pos)>500*px){nx=(l.pos+g.pos)/2;nw=(g.pos-l.pos)/px;fitted=true;}
@@ -837,7 +869,7 @@ document.getElementById('autoBtn').onclick=async()=>{
   let fitMsg='';
   if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3200;r.dMm=3200;}});}
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
-  const det=rooms.map(r=>'<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._eng?(' ['+r._eng+']'):'')+(r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):'')).join('');
+  const det=rooms.map(r=>{const S=r._fitS||{};return '<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._eng?(' ['+r._eng+']'):'')+(r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+(S.top?'*':'')+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+(S.bot?'*':'')+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+(S.lft?'*':'')+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+(S.rgt?'*':'')+'mm]'):'');}).join('');
   document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN. Drag brown robe X onto the robe.'+det+'</small>';
   draw();renderList();
 };
