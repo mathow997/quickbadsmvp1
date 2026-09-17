@@ -417,3 +417,11 @@ Entries stay chronological; the live question is always the last entry.
   thin furniture bits). Rays now resolve solid band → outline pair → single thin line
   (≥2px), strict→loose thresholds within each class. `~` marks single-line sides in messages.
 - Priority order protects A01 (solids/pairs still win where present); singles only fill gaps.
+
+## 2026-09-17 — v6.9: room scan replaces bed-seed + fallback (built, pushed)
+
+- No `*`/`~` hunt needed: beds do not assemble on these sheets, seeds land between rooms.
+  New auto: grid seeds (2m) over plan mass → fit each → keep 4-side fits with 8–30m² and
+  min side ≥2400 → score by closeness to 12m² → dedupe within 1200mm → keep top-N by bedcount.
+  Rooms are defined as places that fit, not as bed containers.
+- biggestIsMain + room-relative robes + fitAll unchanged downstream.

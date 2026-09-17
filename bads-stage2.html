@@ -836,31 +836,29 @@ document.getElementById('autoBtn').onclick=async()=>{
   const wantBeds=+document.getElementById('bedcount').value||2;
   const W=bg.width,H=bg.height,s=pxPerMm;
   rooms=[];excls=[];sel=null;
-  const seeds=(window.lastVec&&window.lastVec.beds&&window.lastVec.beds.length)?window.lastVec.beds.slice().sort((a,b)=>b.w*b.h-a.w*a.h).slice(0,3):[];
+  const WM0=wallMask(); // v6.9: room scan — grid seeds over plan mass, keep best 4-side fits
   let seedMsg='';
-  if(seeds.length){
-    const ptW=W/RENDER,ptH=H/RENDER;
-    const posStr=[];
-    seeds.forEach((b,i)=>{
-      const cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2;
-      const wMm=Math.max(3400,Math.round((Math.max(b.w,b.h)+800)/10)*10);
-      const dMm=Math.max(3200,Math.round((Math.min(b.w,b.h)+800)/10)*10);
-      const ix=cx/ptW*W,iy=(ptH-cy)/ptH*H;
-      posStr.push(Math.round(ix/W*100)+','+Math.round(iy/H*100)+'%');
-      rooms.push({id:uid++,type:'other',label:'BEDROOM '+(i+1),x:ix,y:iy,wMm,dMm,rot:0});
-    });
-    seedMsg='Seeded '+seeds.length+' boxes on detected beds ('+posStr.join(' ')+'). ';
-  }else{
-    const WM0=wallMask();
-    let scx=W/2,scy=H/2;
-    if(WM0&&WM0.bb){scx=(WM0.bb.x0+WM0.bb.x1)/2/WM0.k;scy=(WM0.bb.y0+WM0.bb.y1)/2/WM0.k;}
-    const put=(type,label,wMm,dMm,oxMm,oyMm)=>{rooms.push({id:uid++,type,label,x:scx+oxMm*s,y:scy+oyMm*s,wMm,dMm,rot:0});};
-    if(wantBeds===1){put('main','BEDROOM 1',3400,3400,0,0);}
-    if(wantBeds===2){put('main','BEDROOM 1',3400,3200,-1600,0);put('other','BEDROOM 2',3400,3200,1600,0);}
-    if(wantBeds===3){put('main','BEDROOM 1',3200,3000,-1800,0);put('other','BEDROOM 2',3200,3000,0,0);put('other','BEDROOM 3',3200,3000,1800,0);}
-    rooms.forEach(r=>{r.wMm=Math.min(r.wMm,5000);r.dMm=Math.min(r.dMm,5000);});
-    seedMsg='No beds detected — placed '+wantBeds+' fallback boxes at plan dark-area centre. ';
-  }
+  if(WM0&&WM0.bb){
+    const x0=WM0.bb.x0/WM0.k,x1=WM0.bb.x1/WM0.k,y0=WM0.bb.y0/WM0.k,y1=WM0.bb.y1/WM0.k;
+    const step=2000*pxPerMm,cands=[];
+    for(let gy=y0+step/2;gy<y1;gy+=step)for(let gx=x0+step/2;gx<x1;gx+=step){
+      const r={id:0,type:'other',label:'',x:gx,y:gy,wMm:3200,dMm:3200,rot:0};
+      if(!fitRoom(r))continue;
+      const d=r._fitD;if(!d||d.top==null||d.bot==null||d.lft==null||d.rgt==null)continue;
+      const area=r.wMm*r.dMm/1e6,mn=Math.min(r.wMm,r.dMm);
+      if(area<8||area>30||mn<2400)continue;
+      cands.push({r,score:4000-Math.abs(area-12)*100-Math.abs(r.wMm-r.dMm)*10});
+    }
+    cands.sort((a,b)=>b.score-a.score);
+    const kept=[];
+    for(const c of cands){
+      if(kept.length>=wantBeds)break;
+      if(kept.some(k=>Math.hypot(k.r.x-c.r.x,k.r.y-c.r.y)<1200*pxPerMm))continue;
+      kept.push(c);
+    }
+    kept.forEach((c,i)=>{c.r.id=uid++;c.r.label='BEDROOM '+(i+1);rooms.push(c.r);});
+    seedMsg='Scanned '+cands.length+' fitted candidates → kept '+kept.length+'/'+wantBeds+'. ';
+  }else seedMsg='No plan mass found — nothing placed. ';
   rooms.forEach(r=>{
     const hw=((r.rot%180===0)?r.wMm:r.dMm)*s/2;
     const robeD=Math.min(2000,Math.round(r.dMm*0.6/10)*10);
