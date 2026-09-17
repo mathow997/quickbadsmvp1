@@ -514,4 +514,18 @@ Entries stay chronological; the live question is always the last entry.
 - Rule restated: log every call/path change same-session; entries chronological, newest last;
   no apostrophes in JS comments (brace-counter lies); root/repo copies synced on every commit.
 
+## 2026-09-17 — bedroom identity rules (user spec, not yet built)
+
+- Bedrooms are ALWAYS on the plan edge; are 3.0×3.0 or 3.4×3.0 (±5%); have robes.
+  (Current scan scores area≈12 + squareness only — no edge/size-band/robe terms, which is why
+  living rooms win.)
+- Proposed scoring: size-band match (min rel-err vs 3.0×3.0 / 3.4×3.0 both rotations) +
+  edge bonus (box near plan-bbox border) + robe-adjacency bonus (robe-like rect within 400mm).
+  Replaces area+aspect terms.
+- AI-live to look at plans: feasible (vision API proposes regions, geometry still fits walls),
+  two shapes — bring-your-own-key direct browser call (works on static Pages, key stays with
+  user) vs key-holding proxy backend (infra + cost + client-data-leaves-practice privacy flag).
+- Verdict: hand rules first (deterministic, offline, testable today); AI as fast-follow region
+  proposer, never the measurer. Demo path stays fake-it regardless.
+
 
