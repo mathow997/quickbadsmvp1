@@ -847,7 +847,7 @@ document.getElementById('autoBtn').onclick=async()=>{
       const d=r._fitD;if(!d||d.top==null||d.bot==null||d.lft==null||d.rgt==null)continue;
       const area=r.wMm*r.dMm/1e6,mn=Math.min(r.wMm,r.dMm);
       if(area<8||area>30||mn<2400)continue;
-      cands.push({r,score:4000-Math.abs(area-12)*100-Math.abs(r.wMm-r.dMm)*10});
+      cands.push({r,score:4000-Math.abs(area-12)*100-Math.abs(r.wMm/r.dMm-1)*500});
     }
     cands.sort((a,b)=>b.score-a.score);
     const kept=[];
