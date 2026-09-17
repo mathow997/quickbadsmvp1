@@ -802,7 +802,8 @@ document.getElementById('autoBtn').onclick=async()=>{
   }
   rooms.forEach(r=>{
     const hw=((r.rot%180===0)?r.wMm:r.dMm)*s/2;
-    excls.push({id:uid++,label:'ROBE (excluded)',x:r.x+hw-300*s,y:r.y,wMm:600,dMm:Math.min(2000,Math.round(r.dMm*0.6/10)*10),rot:0});
+    const robeD=Math.min(2000,Math.round(r.dMm*0.6/10)*10);
+    excls.push({id:uid++,label:'ROBE (excluded)',x:r.x+hw-300*s,y:r.y+(r.dMm-robeD)/2*s,wMm:600,dMm:robeD,rot:0});
   });
   biggestIsMain();
   let fitMsg='';

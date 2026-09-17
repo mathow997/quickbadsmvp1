@@ -346,3 +346,11 @@ Entries stay chronological; the live question is always the last entry.
   biggest button (auto-categorize), Save/Load (JSON covers it), PNG snapshot (PDF is the
   deliverable), dead helpers; inspector collapsed in <details open>. Panel now reads
   load → measure → review → export.
+
+## 2026-09-17 — v6.3: robe to bottom-inside corner (built, pushed)
+
+- Robe default was mid-right-edge (hung off into paper when room over-fit right). Now
+  bottom-inside corner (right edge, bottom flush) — matches A01 + FH robe placement; user
+  drags only when wrong. Net subtracts overlap as before.
+- Confirmed from screenshots: crop fix revived FH beds (green on bed); A01 fits on walls.
+  FH auto/fit outcome still needs one autoMsg line ([eng] + sides).
