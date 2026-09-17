@@ -672,11 +672,31 @@ function drawVec(){
 function fitRoom(r){
   const src=(document.getElementById('wallsrc')||{value:'auto'}).value||'auto';
   r._eng=null;
-  if(src==='ras'){if(fitRaster(r)){r._eng='ras';return true;}return false;}
-  if(src==='vec'){if(fitVec(r)){r._eng='vec';return true;}return false;}
-  if(fitVec(r)){r._eng='vec';return true;}
-  if(fitRaster(r)){r._eng='ras';return true;}
-  return false;
+  let ok=false;
+  if(src==='ras'&&fitRaster(r)){r._eng='ras';ok=true;}
+  else if(src==='vec'&&fitVec(r)){r._eng='vec';ok=true;}
+  else if(src==='auto'){if(fitVec(r)){r._eng='vec';ok=true;}else if(fitRaster(r)){r._eng='ras';ok=true;}}
+  if(!ok)return false;
+  snapUnfitted(r);
+  return true;
+}
+function snapUnfitted(r){
+  if(!pxPerMm||!r._fitD)return;
+  const s=pxPerMm,d=r._fitD;
+  const hw=pxSizeW(r)/2,hh=pxSizeH(r)/2;
+  const tF=d.top!=null,bF=d.bot!=null,lF=d.lft!=null,rF=d.rgt!=null;
+  if(!(tF&&bF)){
+    if((r.rot%180)===0)r.dMm=3000;else r.wMm=3000;
+    const hh2=3000/2*s;
+    if(tF&&!bF)r.y=(r.y-hh)+hh2;
+    else if(bF&&!tF)r.y=(r.y+hh)-hh2;
+  }
+  if(!(lF&&rF)){
+    if((r.rot%180)===0)r.wMm=3000;else r.dMm=3000;
+    const hw2=3000/2*s;
+    if(lF&&!rF)r.x=(r.x-hw)+hw2;
+    else if(rF&&!lF)r.x=(r.x+hw)-hw2;
+  }
 }
 function fitVec(r){
   const LV=window.lastVec;
@@ -927,12 +947,12 @@ function detectRobes(){
   out.sort((a,b)=>((b.conf?1:0)-(a.conf?1:0))||(b.n-a.n));
   return out;
 }
-function placeRobes(){
-  if(!bg||!pxPerMm)return;
+function placeRobes(list){
+  if(!bg||!pxPerMm)return 0;
   const s=pxPerMm,ptW=bg.width/RENDER,ptH=bg.height/RENDER;
   const found=detectRobes(),used=new Set();
   let detN=0;
-  rooms.forEach(r=>{
+  (list||rooms).forEach(r=>{
     const hw=((r.rot%180===0)?r.wMm:r.dMm)*s/2,hh=((r.rot%180===0)?r.dMm:r.wMm)*s/2;
     const rX0=r.x-hw,rX1=r.x+hw,rY0=r.y-hh,rY1=r.y+hh;
     let bi=-1,bgap=1e9;
@@ -1028,7 +1048,7 @@ document.getElementById('autoBtn').onclick=async()=>{
   draw();renderList();
 };
 
-const APP_VERSION='v9.1-demo';
+const APP_VERSION='v9.2-demo';
 document.getElementById('verOut').textContent='QuickBADs '+APP_VERSION;
 const FAKE=new URLSearchParams(location.search).has('fake');
 document.getElementById('fakeBtn').onclick=()=>{
@@ -1057,7 +1077,8 @@ async function loadExpected(s){
 const SAMPLES=[
   {file:'trial-a01.pdf',label:'Trial A01 · 1 bed',beds:1},
   {file:'fh-c-1bed.pdf',label:'FH C · 1 bed',beds:1},
-  {file:'fh-c-2.pdf',label:'FH C · alt',beds:1},
+  {file:'fh-c-2a.pdf',label:'FH C 2A · 2 bed',beds:2},
+  {file:'fh-c-2b.pdf',label:'FH C 2B · 2 bed',beds:2},
 ];
 const EXPECTED=['trial-a01-BADS.pdf','fh-c-1bed-BADS.pdf','fh-c-2-BADS.pdf'];
 async function buildThumbs(){
@@ -1146,7 +1167,7 @@ async function seedBed(p){
   const r={id:uid++,type:'other',label:'BEDROOM',x:p.x,y:p.y,wMm:3200,dMm:3200,rot:0};
   rooms.push(r);
   const ok=fitRoom(r);
-  biggestIsMain();
+  placeRobes([r]);robeTrim();biggestIsMain();
   sel={kind:'room',ref:r};draw();renderList();
   const d=r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):'';
   document.getElementById('autoMsg').innerHTML='<small>Seeded at click'+(ok?' — fitted to inner wall faces.':' — fit failed, drag edges.')+(r._eng?(' ['+r._eng+']'):'')+d+'</small>';

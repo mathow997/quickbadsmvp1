@@ -534,6 +534,14 @@ Entries stay chronological; the live question is always the last entry.
   get no auto robe (strict beats legend-style false positives); default corner X stands in.
 - Thin face = doors = room side (recorded for future trim orientation).
 
+## 2026-09-17 — v9.0: robe detection via 3-thick-1-thin rule (built, pushed)
+
+- Robe anatomy (user spec from marked-up screenshots): 3 thick walls + 1 thin door face +
+  thin interior rails. Detector: robe-band rects (400–900 × 1200–2600) scored by interior
+  hatch count (≥6) AND edge conformity (≥3 faces ≥0.6pt, ≥1 thin face). Non-conforming sheets
+  get no auto robe (strict beats legend-style false positives); default corner X stands in.
+- Thin face = doors = room side (recorded for future trim orientation).
+
 ## 2026-09-17 — v9.1: robe provenance + tiered detection (built, pushed)
 
 - v8.6 trim fired on auto-placed default Xs (never verified), shrinking good boxes below
@@ -543,6 +551,15 @@ Entries stay chronological; the live question is always the last entry.
 - Detection tiers: conforming (3-thick-1-thin + hatch) first, else hatch-only near rooms
   (legend excluded by distance). Strict-only excluded thin-only sheets like A01 entirely.
 - 1 robe per bedroom enforced (used-set); corner default kept; autoMsg reports detected count.
+
+## 2026-09-17 — v9.2: click-seeds-robe, standard completion, split samples (built, pushed)
+
+- Click-to-place is now the primary flow: one click seeds the box, fits, auto-places that
+  room's robe, trims to its front, categorizes. Auto-measure unchanged alongside.
+- Unfitted axes complete to 3000 (every standard contains a 3000 side), anchored on any found
+  wall, centered on seed otherwise. No more 2800/3200 seed-size verdicts.
+- Multi-unit fh-c-2 retired as a sample; user-split 2A/2B added (beds:2 each). Multi-unit
+  sheets stay out of scope — split PDFs instead.
 
 ## 2026-09-17 — session status checkpoint (no code change)
 
