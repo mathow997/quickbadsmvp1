@@ -418,10 +418,17 @@ Entries stay chronological; the live question is always the last entry.
   (≥2px), strict→loose thresholds within each class. `~` marks single-line sides in messages.
 - Priority order protects A01 (solids/pairs still win where present); singles only fill gaps.
 
-## 2026-09-17 — v6.9: room scan replaces bed-seed + fallback (built, pushed)
+## 2026-09-17 — v6.9: room scan replaces bed-seed + fallback (built, pushed as 41695cb)
 
 - No `*`/`~` hunt needed: beds do not assemble on these sheets, seeds land between rooms.
   New auto: grid seeds (2m) over plan mass → fit each → keep 4-side fits with 8–30m² and
   min side ≥2400 → score by closeness to 12m² → dedupe within 1200mm → keep top-N by bedcount.
   Rooms are defined as places that fit, not as bed containers.
 - biggestIsMain + room-relative robes + fitAll unchanged downstream.
+
+## 2026-09-17 — v7.0: ratio-based aspect scoring (built, pushed as 4ffc826)
+
+- User-supplied answer key (FH 3400×3000 + robe X on left robe = correct) lost to the monster
+  (4128×4410) because `|w−d|×10` punished 400mm of squareness with −4000. Now
+  `|w/d−1|×500` (weak ratio term); area closeness to 12m² decides. Correct box now outscores
+  monster 3753 → 3348 on the same candidates.
