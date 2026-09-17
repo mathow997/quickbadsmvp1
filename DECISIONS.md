@@ -459,4 +459,9 @@ Entries stay chronological; the live question is always the last entry.
 - Fixed nested duplicate inspector details (v6.2 + v8.0 wrappers collided). Bedcount defaults
   to 1 bed. README added (run online/local, samples, Pages steps).
 
+## 2026-09-17 — v8.2: Pages landing redirect (built, pushed)
+
+- Root URL served README (Pages Jekyll default, no index.html) instead of the app.
+  Added index.html meta-refresh → bads-stage2.html. Verify after deploy propagates.
+
 
