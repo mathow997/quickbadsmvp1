@@ -52,7 +52,7 @@
   <label id="wallsrcLab">Wall evidence (vector default — switch back anytime)</label>
   <select id="wallsrc"><option value="auto" selected>Auto (vector→raster)</option><option value="vec">Vector planes</option><option value="ras">Raster bands (fallback)</option></select>
   <button id="autoBtn" style="font-weight:700;background:#e8f5e9;border:2px solid #00c853;padding:10px">⚡ AUTO-MEASURE BEDROOMS</button>
-  <small>Auto-places bedrooms + robe exclusions. Drag brown robe X onto the robe — net area excludes overlap.</small>
+  <small>Auto-places bedrooms + robe exclusions. Drag brown robe X onto the robe — the box edge snaps to the robe front.</small>
   <div class="row">
     <button id="seedBtn" style="font-weight:700">⊕ Click bedroom…</button>
     <button id="seedRobeBtn" style="font-weight:700">⊕ Click robe…</button>
@@ -822,6 +822,45 @@ function fitRaster(r){
   return true;
 }
 function fitAll(silent){let n=0;rooms.forEach(r=>{if(fitRoom(r))n++;});if(!silent){draw();renderList();}return n;}
+// ---------- v8.6: robe as border — shrink box to robe front instead of subtracting ----------
+function robeTrim(){
+  if(!pxPerMm)return;
+  const s=pxPerMm;
+  rooms.forEach(r=>{
+    const hw=pxSizeW(r)/2,hh=pxSizeH(r)/2;
+    const rad=-(r.rot||0)*Math.PI/180,cs=Math.cos(rad),sn=Math.sin(rad);
+    const toL=(px,py)=>{const dx=px-r.x,dy=py-r.y;return[dx*cs-dy*sn,dx*sn+dy*cs];};
+    let x0=-hw,x1=hw,y0=-hh,y1=hh;
+    excls.forEach(e=>{
+      const ew=pxSizeW(e)/2,eh=pxSizeH(e)/2,er=-(e.rot||0)*Math.PI/180;
+      const ec=Math.cos(er),es=Math.sin(er);
+      let ex0=1e18,ex1=-1e18,ey0=1e18,ey1=-1e18;
+      [[-ew,-eh],[ew,-eh],[ew,eh],[-ew,eh]].forEach(([lx,ly])=>{
+        const wx=e.x+lx*ec-ly*es,wy=e.y+lx*es+ly*ec,q=toL(wx,wy);
+        if(q[0]<ex0)ex0=q[0];if(q[0]>ex1)ex1=q[0];if(q[1]<ey0)ey0=q[1];if(q[1]>ey1)ey1=q[1];
+      });
+      const ccx=(ex0+ex1)/2,ccy=(ey0+ey1)/2;
+      if(Math.abs(ccx)>=hw||Math.abs(ccy)>=hh)return; // robe centre must be inside room
+      if(Math.min(x1,ex1)-Math.max(x0,ex0)<=0||Math.min(y1,ey1)-Math.max(y0,ey0)<=0)return;
+      const opts=[];
+      if(ccx<0)opts.push([ex1,x1,y0,y1]);else opts.push([x0,ex0,y0,y1]);
+      if(ccy<0)opts.push([x0,x1,ey1,y1]);else opts.push([x0,x1,y0,ey0]);
+      let best=null,bestA=0;
+      opts.forEach(o=>{
+        const w=o[1]-o[0],h=o[3]-o[2];
+        if(w>=2000*s&&h>=2000*s&&w*h>bestA){bestA=w*h;best=o;}
+      });
+      if(best){x0=best[0];x1=best[1];y0=best[2];y1=best[3];}
+    });
+    const wPx=x1-x0,hPx=y1-y0;
+    if(wPx>=2000*s&&hPx>=2000*s&&(x0>-hw||x1<hw||y0>-hh||y1<hh)){
+      const lc=[(x0+x1)/2,(y0+y1)/2],ca=Math.cos(-rad),sa=Math.sin(-rad);
+      r.x+=lc[0]*ca-lc[1]*sa;r.y+=lc[0]*sa+lc[1]*ca;
+      if((r.rot%180)===0){r.wMm=Math.round(wPx/s);r.dMm=Math.round(hPx/s);}
+      else{r.wMm=Math.round(hPx/s);r.dMm=Math.round(wPx/s);}
+    }
+  });
+}
 
 // ---------- bedrooms-only auto-measure (no units: one apartment per PDF) ----------
 
@@ -871,7 +910,7 @@ document.getElementById('autoBtn').onclick=async()=>{
   });
   biggestIsMain();
   let fitMsg='';
-  if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3200;r.dMm=3200;}});}
+  if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3200;r.dMm=3200;}});robeTrim();biggestIsMain();}
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
   const det=rooms.map(r=>{const S=r._fitS||{},TT=r._fitT||{};const mk=(v,f,s)=>((v==null?'-':v)+(f?'*':'')+(s?'~':''));return '<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._eng?(' ['+r._eng+']'):'')+(r._fitD?(' [T'+mk(r._fitD.top,S.top,TT.top)+' B'+mk(r._fitD.bot,S.bot,TT.bot)+' L'+mk(r._fitD.lft,S.lft,TT.lft)+' R'+mk(r._fitD.rgt,S.rgt,TT.rgt)+'mm]'):'');}).join('');
   document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN. Drag brown robe X onto the robe.'+det+'</small>';

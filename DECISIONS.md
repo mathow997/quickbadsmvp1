@@ -489,6 +489,16 @@ Entries stay chronological; the live question is always the last entry.
 - Sample click no longer loads boxes in fake mode (jumped the gun) — boxes appear only on
   Auto-measure, which loads the verified exhibit.
 
+## 2026-09-17 — v8.6: robe becomes a border (built, pushed)
+
+- Rule change (real mode only; fake-it untouched): robe X overlapping a room with centre inside
+  no longer just subtracts — the box edge snaps to the robe front (max-area piece wins,
+  2000mm guards). Verdict then reads off a robe-free box; subtraction math stays as backstop
+  for dragged/partial overlaps.
+- Runs in auto-measure after fit (then re-categorize); manual drags never trimmed.
+- User correction: the FH monster box sits in the LIVING room, not an oversized bedroom —
+  room identity (not size) is the miss. Bedrooms need locating, not just fitting.
+
 ## 2026-09-17 — session status checkpoint (no code change)
 
 - HEAD: `5bf94a1` (v8.3 fake-it). Tree clean. Site live with v8.0 UI verified (samples, diagnostics
