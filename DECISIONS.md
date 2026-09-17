@@ -474,4 +474,20 @@ Entries stay chronological; the live question is always the last entry.
 - Authoring = Export JSON → rename → drop in samples/expected/ → push (README documents it).
   User authors the 3 exhibits; loader + flag built here.
 
+## 2026-09-17 — session status checkpoint (no code change)
+
+- HEAD: `5bf94a1` (v8.3 fake-it). Tree clean. Site live with v8.0 UI verified (samples, diagnostics
+  blob, A01 auto `3300×3400 [vec]` symmetric fit, robe subtraction in net).
+- Pending with USER: author 3 verified exhibits (`trial-a01.json`, `fh-c-1bed.json`, `fh-c-2.json`
+  into `samples/expected/` + push) — fake-it falls back to generating until they exist. FH auto
+  retest under v7.0 scoring. Expected-output PDFs. Present-mode run.
+- Pending in CODE: glass-slider wall evidence (FH east side never fits — R-side misses block every
+  auto/click fit there); robe auto-detection (manual click + drag stands in); SVG vector display
+  replacing raster canvas; Revit-plugin mapping notes.
+- UI follows the user mockup, overriding parts of the cleanup plan: wallsrc select + all four
+  checkboxes kept; samples grid is 5 columns (SAMPLES array holds 3, more slots when files added);
+  expected-outputs section doubles as the flagged on-rails backup.
+- Rule restated: log every call/path change same-session; entries chronological, newest last;
+  no apostrophes in JS comments (brace-counter lies); root/repo copies synced on every commit.
+
 
