@@ -528,4 +528,12 @@ Entries stay chronological; the live question is always the last entry.
 - Verdict: hand rules first (deterministic, offline, testable today); AI as fast-follow region
   proposer, never the measurer. Demo path stays fake-it regardless.
 
+## 2026-09-17 — v8.7: bedroom-identity scoring (built, pushed)
+
+- Scan score was area≈12 + squareness — living rooms won. Now, per user spec: size-band match
+  (min rel-err vs 3.0×3.0 / 3.4×3.0 both rotations, ×3000) + edge bonus (box near plan-bbox
+  border, ≤2000mm ramp, +500) + robe adjacency (robe-like 400–900 × 1200–2600 rect within
+  400mm, +400, either orientation). Replaces area+aspect terms; AI-live paused.
+- APP_VERSION bumped to v8.7-demo (footer + diagnostics blob).
+
 

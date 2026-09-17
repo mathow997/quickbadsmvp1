@@ -891,7 +891,35 @@ document.getElementById('autoBtn').onclick=async()=>{
       const d=r._fitD;if(!d||d.top==null||d.bot==null||d.lft==null||d.rgt==null)continue;
       const area=r.wMm*r.dMm/1e6,mn=Math.min(r.wMm,r.dMm);
       if(area<8||area>30||mn<2400)continue;
-      cands.push({r,score:4000-Math.abs(area-12)*100-Math.abs(r.wMm/r.dMm-1)*500});
+      const tg=[[3000,3000],[3400,3000],[3000,3400]];
+      let serr=1e9;
+      for(const [tw,td] of tg)serr=Math.min(serr,(Math.abs(r.wMm-tw)+Math.abs(r.dMm-td))/(tw+td));
+      const hw2=r.wMm/2*pxPerMm,hh2=r.dMm/2*pxPerMm;
+      let edgeBonus=0;
+      if(WM0&&WM0.bb){
+        const bx0=WM0.bb.x0/WM0.k,bx1=WM0.bb.x1/WM0.k,by0=WM0.bb.y0/WM0.k,by1=WM0.bb.y1/WM0.k;
+        const gap=Math.max(0,Math.min(r.x-hw2-bx0,bx1-(r.x+hw2),r.y-hh2-by0,by1-(r.y+hh2)))/pxPerMm;
+        edgeBonus=Math.max(0,1-gap/2000)*500;
+      }
+      let robeBonus=0;
+      const LV=window.lastVec;
+      if(LV&&LV.dedup){
+        const ptH=bg.height/RENDER;
+        const rX0=r.x-hw2,rX1=r.x+hw2,rY0=r.y-hh2,rY1=r.y+hh2;
+        for(const q of LV.dedup){
+          const ss=Math.min(q.w,q.h),ll=Math.max(q.w,q.h);
+          if(ss<400||ss>900||ll<1200||ll>2600)continue;
+          const qcx=(q.x0+q.x1)/2*RENDER,qcy=(ptH-(q.y0+q.y1)/2)*RENDER;
+          const ors=[[ll/2*pxPerMm,ss/2*pxPerMm],[ss/2*pxPerMm,ll/2*pxPerMm]];
+          for(const [hqx,hqy] of ors){
+            const gx=Math.max(rX0,qcx-hqx)-Math.min(rX1,qcx+hqx);
+            const gy=Math.max(rY0,qcy-hqy)-Math.min(rY1,qcy+hqy);
+            if(Math.hypot(Math.max(0,gx),Math.max(0,gy))/pxPerMm<400){robeBonus=400;break;}
+          }
+          if(robeBonus)break;
+        }
+      }
+      cands.push({r,score:4000-serr*3000+edgeBonus+robeBonus});
     }
     cands.sort((a,b)=>b.score-a.score);
     const kept=[];
@@ -917,7 +945,7 @@ document.getElementById('autoBtn').onclick=async()=>{
   draw();renderList();
 };
 
-const APP_VERSION='v8.3-demo';
+const APP_VERSION='v8.7-demo';
 document.getElementById('verOut').textContent='QuickBADs '+APP_VERSION;
 const FAKE=new URLSearchParams(location.search).has('fake');
 document.getElementById('fakeBtn').onclick=()=>{
