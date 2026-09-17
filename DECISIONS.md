@@ -410,3 +410,10 @@ Entries stay chronological; the live question is always the last entry.
   Where a raster side finds nothing, nearest vector line ≥1500mm crossing the ray now stops it
   (*-marked in messages). Accepts sofa/table risk on those sides; user drags, message shows it.
 - lastVec.strokes (already stashed since v5.4) feeds it — no re-parse.
+
+## 2026-09-17 — v6.8: single-line last-resort ray stops (built, pushed)
+
+- No `*` ever appeared: vector fallback found nothing ≥1500mm either (FH vectors are short
+  thin furniture bits). Rays now resolve solid band → outline pair → single thin line
+  (≥2px), strict→loose thresholds within each class. `~` marks single-line sides in messages.
+- Priority order protects A01 (solids/pairs still win where present); singles only fill gaps.

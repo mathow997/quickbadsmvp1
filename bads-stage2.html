@@ -755,7 +755,8 @@ function fitRaster(r){
   const runMin=Math.max(3,Math.round(50*s)),maxR=Math.round(4500*s);
   const cx=Math.round(r.x*WM.k),cy=Math.round(r.y*WM.k);
   const ray=(dx,dy)=>{
-    for(const thr of [140,180,210]){ // v6.4: strict first, looser for tinted walls (FH green)
+    const at=(i0,thin)=>({pos:dx?(cx+dx*i0)/WM.k:(cy+dy*i0)/WM.k,d:i0/s,thin:thin?1:0});
+    const collect=thr=>{
       const runs=[];let run=0,st=0;
       for(let i=1;i<=maxR;i++){
         const x=cx+dx*i,y=cy+dy*i;
@@ -764,14 +765,13 @@ function fitRaster(r){
         else{if(run){runs.push({a:st,b:i-1});run=0;}}
       }
       if(run)runs.push({a:st,b:maxR});
-      const at=i0=>({pos:dx?(cx+dx*i0)/WM.k:(cy+dy*i0)/WM.k,d:i0/s});
-      for(let k=0;k<runs.length;k++){
-        const r0=runs[k];
-        if(r0.b-r0.a+1>=runMin)return at(r0.a); // solid band
-        const r1=runs[k+1]; // outline pair: two thin runs 40-400mm apart
-        if(r1&&(r0.b-r0.a+1)>=2){const gap=(r1.a-r0.b-1)/s;if(gap>=40&&gap<=400)return at(r0.a);}
-      }
-    }
+      return runs;
+    };
+    const TH=[140,180,210];
+    for(const thr of TH)for(const r0 of collect(thr)){if(r0.b-r0.a+1>=runMin)return at(r0.a);} // solid band
+    for(const thr of TH){const runs=collect(thr);for(let k=0;k<runs.length;k++){const r0=runs[k],r1=runs[k+1]; // outline pair
+      if(r1&&(r0.b-r0.a+1)>=2){const gap=(r1.a-r0.b-1)/s;if(gap>=40&&gap<=400)return at(r0.a);}}}
+    for(const thr of TH)for(const r0 of collect(thr)){if(r0.b-r0.a+1>=2)return at(r0.a,1);} // v6.8: single line last resort
     return null;
   };
   let t=ray(0,-1),b=ray(0,1),l=ray(-1,0),g=ray(1,0);
@@ -808,6 +808,7 @@ function fitRaster(r){
   t=t||vstop(true,true);b=b||vstop(true,false);l=l||vstop(false,true);g=g||vstop(false,false);
   r._fitD={top:t?Math.round(t.d):null,bot:b?Math.round(b.d):null,lft:l?Math.round(l.d):null,rgt:g?Math.round(g.d):null};
   r._fitS={top:!!(t&&t.v),bot:!!(b&&b.v),lft:!!(l&&l.v),rgt:!!(g&&g.v)};
+  r._fitT={top:!!(t&&t.thin),bot:!!(b&&b.thin),lft:!!(l&&l.thin),rgt:!!(g&&g.thin)};
   let nx=r.x,ny=r.y,nw=r.wMm,nd=r.dMm,fitted=false;
   if(t&&b&&(b.pos-t.pos)>500*px){ny=(t.pos+b.pos)/2;nd=(b.pos-t.pos)/px;fitted=true;}
   if(l&&g&&(g.pos-l.pos)>500*px){nx=(l.pos+g.pos)/2;nw=(g.pos-l.pos)/px;fitted=true;}
@@ -869,7 +870,7 @@ document.getElementById('autoBtn').onclick=async()=>{
   let fitMsg='';
   if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3200;r.dMm=3200;}});}
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
-  const det=rooms.map(r=>{const S=r._fitS||{};return '<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._eng?(' ['+r._eng+']'):'')+(r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+(S.top?'*':'')+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+(S.bot?'*':'')+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+(S.lft?'*':'')+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+(S.rgt?'*':'')+'mm]'):'');}).join('');
+  const det=rooms.map(r=>{const S=r._fitS||{},TT=r._fitT||{};const mk=(v,f,s)=>((v==null?'-':v)+(f?'*':'')+(s?'~':''));return '<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._eng?(' ['+r._eng+']'):'')+(r._fitD?(' [T'+mk(r._fitD.top,S.top,TT.top)+' B'+mk(r._fitD.bot,S.bot,TT.bot)+' L'+mk(r._fitD.lft,S.lft,TT.lft)+' R'+mk(r._fitD.rgt,S.rgt,TT.rgt)+'mm]'):'');}).join('');
   document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN. Drag brown robe X onto the robe.'+det+'</small>';
   draw();renderList();
 };
