@@ -720,13 +720,33 @@ function wallMask(){
   c.drawImage(bg,0,0,ow,oh);
   const d=c.getImageData(0,0,ow,oh).data,m=new Uint8Array(ow*oh),g=new Uint8Array(ow*oh);
   const mx=Math.round(0.03*ow),my=Math.round(0.03*oh);
-  let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
-  for(let i=0;i<ow*oh;i++){const j=i*4;g[i]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);if(g[i]<140){m[i]=1;const x=i%ow,y=(i/ow)|0;if(x>=mx&&y>=my&&x<ow-mx&&y<oh-my){if(x<bx0)bx0=x;if(y<by0)by0=y;if(x>bx1)bx1=x;if(y>by1)by1=y;}}}
+  let bx0=0,by0=0,bx1=0,by1=0,best=0;
+  for(let i=0;i<ow*oh;i++){const j=i*4;g[i]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);if(g[i]<140)m[i]=1;}
+  const dw=new Uint8Array(ow*oh);
+  for(let y=0;y<oh;y++)for(let x=0;x<ow;x++){
+    if(!m[y*ow+x]||x<mx||y<my||x>=ow-mx||y>=oh-my)continue;
+    for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){const nx=x+ox,ny=y+oy;if(nx>=0&&ny>=0&&nx<ow&&ny<oh)dw[ny*ow+nx]=1;}
+  }
+  const seen=new Uint8Array(ow*oh),stack=[];
+  for(let i=0;i<ow*oh;i++){
+    if(!dw[i]||seen[i])continue;
+    let mass=0,x0=ow,y0=oh,x1=0,y1=0;
+    stack.length=0;stack.push(i);seen[i]=1;
+    while(stack.length){
+      const c=stack.pop(),cx=c%ow,cy=(c/ow)|0;
+      mass++;if(cx<x0)x0=cx;if(cy<y0)y0=cy;if(cx>x1)x1=cx;if(cy>y1)y1=cy;
+      if(cx>0&&dw[c-1]&&!seen[c-1]){seen[c-1]=1;stack.push(c-1);}
+      if(cx<ow-1&&dw[c+1]&&!seen[c+1]){seen[c+1]=1;stack.push(c+1);}
+      if(cy>0&&dw[c-ow]&&!seen[c-ow]){seen[c-ow]=1;stack.push(c-ow);}
+      if(cy<oh-1&&dw[c+ow]&&!seen[c+ow]){seen[c+ow]=1;stack.push(c+ow);}
+    }
+    if(mass>best){best=mass;bx0=x0;by0=y0;bx1=x1;by1=y1;}
+  }
   const gv=document.createElement('canvas');gv.width=ow;gv.height=oh;
   const gc=gv.getContext('2d'),gi=gc.createImageData(ow,oh);
   for(let i=0;i<ow*oh;i++){if(m[i]){gi.data[i*4+1]=200;gi.data[i*4+3]=255;}}
   gc.putImageData(gi,0,0);
-  window._wm={m,g,ow,oh,k,gv,bb:(bx1>=bx0&&by1>=by0)?{x0:bx0,y0:by0,x1:bx1,y1:by1}:null};window._wmkey=key;
+  window._wm={m,g,ow,oh,k,gv,bb:best>100?{x0:bx0,y0:by0,x1:bx1,y1:by1}:null};window._wmkey=key;
   return window._wm;
 }
 function fitRaster(r){

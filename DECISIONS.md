@@ -395,3 +395,11 @@ Entries stay chronological; the live question is always the last entry.
   center on the wall-mask dark bbox (3% page-margin excluded) with fixed sane sizes; clamp kept.
 - Removed dead R/mkRoom fraction helpers. Vector planes still absent on FH (H=0 V=0) — raster
   is the working path there until XObject-matrix hypothesis is tested.
+
+## 2026-09-17 — v6.6: seed at largest dark component (built, pushed)
+
+- v6.5 seeded at the ALL-dark bbox centre, which on FH lands between plan and title block
+  (`[T1658 B- L- R-]` from empty paper). Now: dilate 1px, flood-fill components, seed at the
+  largest (the plan; title/legend stay separate). Minimum 100px mass or no bbox.
+- Meta: the Read tool rendered `by0` as `y0`, sending me hunting a typo that did not exist —
+  bash output is ground truth for exact-match edits.
