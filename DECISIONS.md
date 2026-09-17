@@ -482,6 +482,13 @@ Entries stay chronological; the live question is always the last entry.
 - Fake-it is now fully operational online once Pages redeploys. fh-c-1bed 3400×3080 passes
   main either-way — no FAIL exhibits in the set.
 
+## 2026-09-17 — v8.5: fake-it exit + lazy exhibits (built, pushed)
+
+- Fake-it had no exit: Fake button shared copyDiag's row, which fake mode hides. Own row now;
+  ↩ Real mode stays visible.
+- Sample click no longer loads boxes in fake mode (jumped the gun) — boxes appear only on
+  Auto-measure, which loads the verified exhibit.
+
 ## 2026-09-17 — session status checkpoint (no code change)
 
 - HEAD: `5bf94a1` (v8.3 fake-it). Tree clean. Site live with v8.0 UI verified (samples, diagnostics

@@ -78,7 +78,8 @@
   <div id="info"></div>
   <div id="autoMsg"><small></small></div>
   <hr>
-  <div class="row"><button id="copyDiag">📋 Copy diagnostics</button><button id="fakeBtn">🎭 Fake it</button></div>
+  <div class="row"><button id="copyDiag">📋 Copy diagnostics</button></div>
+  <div class="row"><button id="fakeBtn">🎭 Fake it</button></div>
   <small id="verOut"></small>
 </div>
 <div id="wrap"><canvas id="c" width="1200" height="800"></canvas></div>
@@ -942,7 +943,6 @@ async function loadSample(s){
     document.getElementById('pageno').value=1;
     if(s.beds)document.getElementById('bedcount').value=String(s.beds);
     clearAll();await renderPdf();
-    if(FAKE)await loadExpected(s);
   }catch(_){alert('Could not load sample — check connection, or upload your own PDF.');}
 }
 document.getElementById('copyDiag').onclick=async e=>{
