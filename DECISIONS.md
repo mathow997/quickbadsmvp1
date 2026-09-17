@@ -553,15 +553,6 @@ Entries stay chronological; the live question is always the last entry.
 - Multi-unit fh-c-2 retired as a sample; user-split 2A/2B added (beds:2 each). Multi-unit
   sheets stay out of scope — split PDFs instead.
 
-## 2026-09-17 — v9.2: click-seeds-robe, standard completion, split samples (built, pushed as 0d469a8)
-
-- Click-to-place is now the primary flow: one click seeds the box, fits, auto-places that
-  room's robe, trims to its front, categorizes. Auto-measure unchanged alongside.
-- Unfitted axes complete to 3000 (every standard contains a 3000 side), anchored on any found
-  wall, centered on seed otherwise. No more 2800/3200 seed-size verdicts.
-- Multi-unit fh-c-2 retired as a sample; user-split 2A/2B added (beds:2 each). Multi-unit
-  sheets stay out of scope — split PDFs instead.
-
 ## 2026-09-17 — v9.3: robe-first ordering, overlap trim trigger (built, pushed)
 
 - Yes to robe-first: click robe → click room now works (room trims to the waiting X), and
