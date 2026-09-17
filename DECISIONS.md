@@ -426,6 +426,13 @@ Entries stay chronological; the live question is always the last entry.
   Rooms are defined as places that fit, not as bed containers.
 - biggestIsMain + room-relative robes + fitAll unchanged downstream.
 
+## 2026-09-17 — v7.0 verdict: monster kept anyway, scoring not the blocker (no code change)
+
+- Same 4128×4410 kept with identical sides: the correct 3400×3000 was never among the 3 fitted
+  candidates, so ranking never mattered. Missing candidate = right side never fits (glass slider
+  wall on FH bedroom east side). Next detector work: glass/track lines as wall evidence.
+- HOLD on code per user — presentation cleanup first.
+
 ## 2026-09-17 — v7.0: ratio-based aspect scoring (built, pushed as 4ffc826)
 
 - User-supplied answer key (FH 3400×3000 + robe X on left robe = correct) lost to the monster
