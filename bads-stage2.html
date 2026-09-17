@@ -54,8 +54,8 @@
   <button id="autoBtn" style="font-weight:700;background:#e8f5e9;border:2px solid #00c853;padding:10px">⚡ AUTO-MEASURE BEDROOMS</button>
   <small>Auto-places bedrooms + robe exclusions. Drag brown robe X onto the robe — the box edge snaps to the robe front.</small>
   <div class="row">
-    <button id="seedBtn" style="font-weight:700">⊕ Click bedroom…</button>
     <button id="seedRobeBtn" style="font-weight:700">⊕ Click robe…</button>
+    <button id="seedBtn" style="font-weight:700">⊕ Click bedroom…</button>
   </div>
   <label id="showVecLab"><input type="checkbox" id="showVec" style="width:auto"> Show evidence overlay (fills red, heavy strokes orange, planes blue, beds green)</label><br>
   <label><input type="checkbox" id="hideExcl" style="width:auto"> Hide robe exclusions (also never exported)</label><br>
@@ -107,7 +107,8 @@ function netAreaMm2(r){
   let ovPx=0;excls.forEach(e=>{ovPx+=overlapPx(r,e);});
   return Math.max(0,gross-ovPx/(pxPerMm*pxPerMm));
 }
-function nearStd(v){for(const s of [3000,3400])if(Math.abs(v-s)<=0.08*s)return s;return 0;}
+function nearStd(v){for(const s of [3000,3400])if(Math.abs(v-s)<=0.05*s)return s;return 0;}
+function stdOK(w,d){for(const td of [[3000,3000],[3400,3000],[3000,3400]])if(Math.abs(w-td[0])<=0.05*td[0]&&Math.abs(d-td[1])<=0.05*td[1])return true;return false;}
 function checkRoom(r){
   const area=netAreaMm2(r)/1e6,mn=Math.min(r.wMm,r.dMm);
   if(r.type==='main')return{ok:(r.wMm>=3000&&r.dMm>=3400)||(r.wMm>=3400&&r.dMm>=3000),area,mn,need:'Need 3.0x3.4 (either way), robe extra excluded'};
@@ -669,7 +670,7 @@ function drawVec(){
   ctx.restore();
 }
 // ---------- v4: wall-fit — grow boxes to nearest inner-face planes ----------
-function fitRoom(r){
+function fitRoom(r,keep){
   const src=(document.getElementById('wallsrc')||{value:'auto'}).value||'auto';
   r._eng=null;
   let ok=false;
@@ -677,7 +678,7 @@ function fitRoom(r){
   else if(src==='vec'&&fitVec(r)){r._eng='vec';ok=true;}
   else if(src==='auto'){if(fitVec(r)){r._eng='vec';ok=true;}else if(fitRaster(r)){r._eng='ras';ok=true;}}
   if(!ok)return false;
-  snapUnfitted(r);
+  if(!keep)snapUnfitted(r);
   return true;
 }
 function snapUnfitted(r){
@@ -950,11 +951,17 @@ function detectRobes(){
   out.sort((a,b)=>((b.conf?1:0)-(a.conf?1:0))||(b.n-a.n));
   return out;
 }
+function fitExcl(e){
+  const w0=e.wMm,d0=e.dMm,x0=e.x,y0=e.y;
+  if(!fitRoom(e,true))return;
+  if(Math.max(e.wMm,e.dMm)>2600){e.wMm=w0;e.dMm=d0;e.x=x0;e.y=y0;}
+}
 function placeRobes(list){
   if(!bg||!pxPerMm)return 0;
   const s=pxPerMm,ptW=bg.width/RENDER,ptH=bg.height/RENDER;
   const found=detectRobes(),used=new Set();
   let detN=0;
+  const exStart=excls.length;
   (list||rooms).forEach(r=>{
     const hw=((r.rot%180===0)?r.wMm:r.dMm)*s/2,hh=((r.rot%180===0)?r.dMm:r.wMm)*s/2;
     const rX0=r.x-hw,rX1=r.x+hw,rY0=r.y-hh,rY1=r.y+hh;
@@ -977,6 +984,7 @@ function placeRobes(list){
       excls.push({id:uid++,auto:true,label:'ROBE (excluded)',x:r.x+hw-300*s,y:r.y+(r.dMm-robeD)/2*s,wMm:600,dMm:robeD,rot:0});
     }
   });
+  for(let i=exStart;i<excls.length;i++)fitExcl(excls[i]);
   return detN;
 }
 document.getElementById('autoBtn').onclick=async()=>{
@@ -994,13 +1002,15 @@ document.getElementById('autoBtn').onclick=async()=>{
     const x0=WM0.bb.x0/WM0.k,x1=WM0.bb.x1/WM0.k,y0=WM0.bb.y0/WM0.k,y1=WM0.bb.y1/WM0.k;
     const step=2000*pxPerMm,cands=[];
     for(let gy=y0+step/2;gy<y1;gy+=step)for(let gx=x0+step/2;gx<x1;gx+=step){
-      const r={id:0,type:'other',label:'',x:gx,y:gy,wMm:3200,dMm:3200,rot:0};
+      const r={id:0,type:'other',label:'',x:gx,y:gy,wMm:3000,dMm:3000,rot:0};
       if(!fitRoom(r))continue;
       const d=r._fitD;if(!d)continue;
       const nsides=(d.top!=null?1:0)+(d.bot!=null?1:0)+(d.lft!=null?1:0)+(d.rgt!=null?1:0);
       if(nsides<3)continue;
       const area=r.wMm*r.dMm/1e6,mn=Math.min(r.wMm,r.dMm);
       if(area<8||area>30||mn<2400)continue;
+      const stdOK=(w,d)=>{for(const td of [[3000,3000],[3400,3000],[3000,3400]])if(Math.abs(w-td[0])<=0.05*td[0]&&Math.abs(d-td[1])<=0.05*td[1])return true;return false;};
+      if(!stdOK(r.wMm,r.dMm))continue;
       const tg=[[3000,3000],[3400,3000],[3000,3400]];
       let serr=1e9;
       for(const [tw,td] of tg)serr=Math.min(serr,(Math.abs(r.wMm-tw)+Math.abs(r.dMm-td))/(tw+td));
@@ -1044,14 +1054,14 @@ document.getElementById('autoBtn').onclick=async()=>{
   placeRobes();
   biggestIsMain();
   let fitMsg='';
-  if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3200;r.dMm=3200;}});const nRobe=placeRobes();robeTrim();biggestIsMain();}
+  if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3000;r.dMm=3000;}});const nRobe=placeRobes();robeTrim();biggestIsMain();}
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
   const det=rooms.map(r=>{const S=r._fitS||{},TT=r._fitT||{};const mk=(v,f,s)=>((v==null?'-':v)+(f?'*':'')+(s?'~':''));return '<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._eng?(' ['+r._eng+']'):'')+(r._fitD?(' [T'+mk(r._fitD.top,S.top,TT.top)+' B'+mk(r._fitD.bot,S.bot,TT.bot)+' L'+mk(r._fitD.lft,S.lft,TT.lft)+' R'+mk(r._fitD.rgt,S.rgt,TT.rgt)+'mm]'):'');}).join('');
   document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN.'+(nRobe?(' '+nRobe+' robe(s) auto-detected.'):' No robes detected — click robe + drag.')+det+'</small>';
   draw();renderList();
 };
 
-const APP_VERSION='v9.3-demo';
+const APP_VERSION='v9.4-demo';
 document.getElementById('verOut').textContent='QuickBADs '+APP_VERSION;
 const FAKE=new URLSearchParams(location.search).has('fake');
 document.getElementById('fakeBtn').onclick=()=>{
@@ -1167,18 +1177,9 @@ async function seedBed(p){
   if(!bg||!pxPerMm){alert('Load a PDF first');return;}
   const key=fileName+'|'+document.getElementById('pageno').value;
   if(!window.lastVec||window.lastVecKey!==key){await runVecV2(document.getElementById('vecOut'));}
-  const r={id:uid++,type:'other',label:'BEDROOM',x:p.x,y:p.y,wMm:3200,dMm:3200,rot:0};
+  const r={id:uid++,type:'other',label:'BEDROOM',x:p.x,y:p.y,wMm:3000,dMm:3000,rot:0};
   rooms.push(r);
   const ok=fitRoom(r);
-  const s0=pxPerMm,hw0=pxSizeW(r)/2,hh0=pxSizeH(r)/2;
-  const hasUserRobe=excls.some(e=>{
-    if(e.auto===true)return false;
-    const ew=pxSizeW(e)/2,eh=pxSizeH(e)/2;
-    const gx=Math.max(r.x-hw0,e.x-ew)-Math.min(r.x+hw0,e.x+ew);
-    const gy=Math.max(r.y-hh0,e.y-eh)-Math.min(r.y+hh0,e.y+eh);
-    return Math.hypot(Math.max(0,gx),Math.max(0,gy))/s0<600;
-  });
-  if(!hasUserRobe)placeRobes([r]);
   robeTrim();biggestIsMain();
   sel={kind:'room',ref:r};draw();renderList();
   const d=r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):'';
@@ -1189,7 +1190,7 @@ function seedRobe(p){
   seedRobeMode=false;document.getElementById('seedRobeBtn').textContent='⊕ Click robe…';
   if(!bg||!pxPerMm){alert('Load a PDF first');return;}
   const e={id:uid++,auto:false,label:'ROBE (excluded)',x:p.x,y:p.y,wMm:600,dMm:1800,rot:0};
-  excls.push(e);robeTrim();biggestIsMain();
+  excls.push(e);fitExcl(e);robeTrim();biggestIsMain();
   sel={kind:'excl',ref:e};draw();renderList();
   document.getElementById('autoMsg').innerHTML='<small>Robe exclusion placed — drag edges onto the robe. Net area excludes overlap. Never exported.</small>';
 }

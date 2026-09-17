@@ -553,6 +553,15 @@ Entries stay chronological; the live question is always the last entry.
 - Multi-unit fh-c-2 retired as a sample; user-split 2A/2B added (beds:2 each). Multi-unit
   sheets stay out of scope — split PDFs instead.
 
+## 2026-09-17 — v9.2: click-seeds-robe, standard completion, split samples (built, pushed as 0d469a8)
+
+- Click-to-place is now the primary flow: one click seeds the box, fits, auto-places that
+  room's robe, trims to its front, categorizes. Auto-measure unchanged alongside.
+- Unfitted axes complete to 3000 (every standard contains a 3000 side), anchored on any found
+  wall, centered on seed otherwise. No more 2800/3200 seed-size verdicts.
+- Multi-unit fh-c-2 retired as a sample; user-split 2A/2B added (beds:2 each). Multi-unit
+  sheets stay out of scope — split PDFs instead.
+
 ## 2026-09-17 — v9.3: robe-first ordering, overlap trim trigger (built, pushed)
 
 - Yes to robe-first: click robe → click room now works (room trims to the waiting X), and
@@ -561,12 +570,14 @@ Entries stay chronological; the live question is always the last entry.
   Now: centre inside OR ≥40% X overlap. Trusted = anything not explicitly auto.
 - seedRobe now trims overlapping rooms immediately, so both orders converge.
 
-- Click-to-place is now the primary flow: one click seeds the box, fits, auto-places that
-  room's robe, trims to its front, categorizes. Auto-measure unchanged alongside.
-- Unfitted axes complete to 3000 (every standard contains a 3000 side), anchored on any found
-  wall, centered on seed otherwise. No more 2800/3200 seed-size verdicts.
-- Multi-unit fh-c-2 retired as a sample; user-split 2A/2B added (beds:2 each). Multi-unit
-  sheets stay out of scope — split PDFs instead.
+## 2026-09-17 — v9.4: click order swap, no auto-robe on bedroom click, standard gate (built, pushed)
+
+- Button order swapped: ⊕ Click robe is now left/first (robe-first workflow).
+- Click-bedroom no longer auto-places a robe (it kept landing inside boxes); robe comes only
+  from click-robe or auto-measure detection. Trim still applies to pre-placed user Xs.
+- Seeds (scan + click + revert) now start at 3000×3000; scan keeps only boxes with BOTH dims
+  within ±5% of a standard pair (3.0×3.0 / 3.4×3.0 / 3.0×3.4); nearStd tightened 8%→5%.
+- Robe Xs now fit to all 4 enclosing walls on placement (was 2 at best), reverting past 2600mm.
 
 ## 2026-09-17 — session status checkpoint (no code change)
 
