@@ -354,3 +354,14 @@ Entries stay chronological; the live question is always the last entry.
   drags only when wrong. Net subtracts overlap as before.
 - Confirmed from screenshots: crop fix revived FH beds (green on bed); A01 fits on walls.
   FH auto/fit outcome still needs one autoMsg line ([eng] + sides).
+
+## 2026-09-17 — v6.4: multi-threshold rays, fallback clamp, fit gates (built, pushed)
+
+- FH autoMsg `[T1446 B- L- R1552mm]` showed rays working but half-blind: near green walls missed,
+  far black junk hit. Rays now try luminance thresholds 140→180→210 per side (strict first).
+- FH auto monster (12615mm fallback kept after total fit fail): fallbacks clamped to 5000mm and
+  any box with all four sides missing reverts to 3200 seed instead of keeping garbage.
+- Fit gates required planesH, so raster never ran without vector planes — removed (engines
+  self-guard). Seed path already called fitRoom directly.
+- A01 robe: net math already subtracts overlap (11.44 vs 12.45 gross proves it) — remaining gap
+  is X placement, handled by bottom-corner default + click-robe + drag.

@@ -718,13 +718,13 @@ function wallMask(){
   const off=document.createElement('canvas');off.width=ow;off.height=oh;
   const c=off.getContext('2d',{willReadFrequently:true});
   c.drawImage(bg,0,0,ow,oh);
-  const d=c.getImageData(0,0,ow,oh).data,m=new Uint8Array(ow*oh);
-  for(let i=0;i<ow*oh;i++){const j=i*4;if(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]<140)m[i]=1;}
+  const d=c.getImageData(0,0,ow,oh).data,m=new Uint8Array(ow*oh),g=new Uint8Array(ow*oh);
+  for(let i=0;i<ow*oh;i++){const j=i*4;g[i]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);if(g[i]<140)m[i]=1;}
   const gv=document.createElement('canvas');gv.width=ow;gv.height=oh;
   const gc=gv.getContext('2d'),gi=gc.createImageData(ow,oh);
   for(let i=0;i<ow*oh;i++){if(m[i]){gi.data[i*4+1]=200;gi.data[i*4+3]=255;}}
   gc.putImageData(gi,0,0);
-  window._wm={m,ow,oh,k,gv};window._wmkey=key;
+  window._wm={m,g,ow,oh,k,gv};window._wmkey=key;
   return window._wm;
 }
 function fitRaster(r){
@@ -733,20 +733,22 @@ function fitRaster(r){
   const runMin=Math.max(3,Math.round(50*s)),maxR=Math.round(4500*s);
   const cx=Math.round(r.x*WM.k),cy=Math.round(r.y*WM.k);
   const ray=(dx,dy)=>{
-    const runs=[];let run=0,st=0;
-    for(let i=1;i<=maxR;i++){
-      const x=cx+dx*i,y=cy+dy*i;
-      if(x<0||y<0||x>=WM.ow||y>=WM.oh)break;
-      if(WM.m[y*WM.ow+x]){if(!run)st=i;run++;}
-      else{if(run){runs.push({a:st,b:i-1});run=0;}}
-    }
-    if(run)runs.push({a:st,b:maxR});
-    const at=i0=>({pos:dx?(cx+dx*i0)/WM.k:(cy+dy*i0)/WM.k,d:i0/s});
-    for(let k=0;k<runs.length;k++){
-      const r0=runs[k];
-      if(r0.b-r0.a+1>=runMin)return at(r0.a); // solid band
-      const r1=runs[k+1]; // outline pair: two thin runs 40-400mm apart
-      if(r1&&(r0.b-r0.a+1)>=2){const gap=(r1.a-r0.b-1)/s;if(gap>=40&&gap<=400)return at(r0.a);}
+    for(const thr of [140,180,210]){ // v6.4: strict first, looser for tinted walls (FH green)
+      const runs=[];let run=0,st=0;
+      for(let i=1;i<=maxR;i++){
+        const x=cx+dx*i,y=cy+dy*i;
+        if(x<0||y<0||x>=WM.ow||y>=WM.oh)break;
+        if(WM.g[y*WM.ow+x]<thr){if(!run)st=i;run++;}
+        else{if(run){runs.push({a:st,b:i-1});run=0;}}
+      }
+      if(run)runs.push({a:st,b:maxR});
+      const at=i0=>({pos:dx?(cx+dx*i0)/WM.k:(cy+dy*i0)/WM.k,d:i0/s});
+      for(let k=0;k<runs.length;k++){
+        const r0=runs[k];
+        if(r0.b-r0.a+1>=runMin)return at(r0.a); // solid band
+        const r1=runs[k+1]; // outline pair: two thin runs 40-400mm apart
+        if(r1&&(r0.b-r0.a+1)>=2){const gap=(r1.a-r0.b-1)/s;if(gap>=40&&gap<=400)return at(r0.a);}
+      }
     }
     return null;
   };
@@ -798,6 +800,7 @@ document.getElementById('autoBtn').onclick=async()=>{
     if(wantBeds===1){rooms.push(R('main','BEDROOM 1',0.30,0.36,0.42,0.55));}
     if(wantBeds===2){rooms.push(R('main','BEDROOM 1',0.26,0.36,0.32,0.55));rooms.push(R('other','BEDROOM 2',0.26,0.36,0.64,0.55));}
     if(wantBeds===3){rooms.push(R('main','BEDROOM 1',0.20,0.36,0.24,0.55));rooms.push(R('other','BEDROOM 2',0.20,0.36,0.50,0.55));rooms.push(R('other','BEDROOM 3',0.20,0.36,0.76,0.55));}
+    rooms.forEach(r=>{r.wMm=Math.min(r.wMm,5000);r.dMm=Math.min(r.dMm,5000);});
     seedMsg='No beds detected — placed '+wantBeds+' fallback boxes. ';
   }
   rooms.forEach(r=>{
@@ -807,7 +810,7 @@ document.getElementById('autoBtn').onclick=async()=>{
   });
   biggestIsMain();
   let fitMsg='';
-  if(window.lastVec&&window.lastVec.planesH){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';}
+  if(window.lastVec){const n=fitAll(true);fitMsg='Fitted '+n+'/'+rooms.length+' to inner wall faces. ';rooms.forEach(r=>{const d=r._fitD;if(d&&d.top==null&&d.bot==null&&d.lft==null&&d.rgt==null){r.wMm=3200;r.dMm=3200;}});}
   sel=rooms.length?{kind:'room',ref:rooms[0]}:sel;
   const det=rooms.map(r=>'<br>'+(r.label||'')+': '+Math.round(r.wMm)+'×'+Math.round(r.dMm)+(r._eng?(' ['+r._eng+']'):'')+(r._fitD?(' [T'+(r._fitD.top==null?'-':r._fitD.top)+' B'+(r._fitD.bot==null?'-':r._fitD.bot)+' L'+(r._fitD.lft==null?'-':r._fitD.lft)+' R'+(r._fitD.rgt==null?'-':r._fitD.rgt)+'mm]'):'')).join('');
   document.getElementById('autoMsg').innerHTML='<small>'+seedMsg+fitMsg+'Drag edges to correct; biggest auto-tagged MAIN. Drag brown robe X onto the robe.'+det+'</small>';
