@@ -43,7 +43,7 @@
   <label>Bedrooms in this apartment</label>
   <select id="bedcount"><option value="1">1 bed</option><option value="2" selected>2 bed</option><option value="3">3 bed</option></select>
   <label>Wall evidence (vector default — switch back anytime)</label>
-  <select id="wallsrc"><option value="vec">Vector planes</option><option value="ras">Raster bands (fallback)</option></select>
+  <select id="wallsrc"><option value="auto" selected>Auto (vector→raster)</option><option value="vec">Vector planes</option><option value="ras">Raster bands (fallback)</option></select>
   <button id="autoBtn" style="font-weight:700;background:#e8f5e9;border:2px solid #00c853;padding:10px">⚡ AUTO-MEASURE BEDROOMS</button>
   <small>Auto-places Main + Other + robe exclusions. Then drag edges to snap to wall inner faces.</small>
   <div class="row">
@@ -667,9 +667,10 @@ function drawVec(){
 }
 // ---------- v4: wall-fit — grow boxes to nearest inner-face planes ----------
 function fitRoom(r){
-  const src=(document.getElementById('wallsrc')||{value:'vec'}).value||'vec';
+  const src=(document.getElementById('wallsrc')||{value:'auto'}).value||'auto';
   if(src==='ras')return fitRaster(r);
-  return fitVec(r);
+  if(src==='vec')return fitVec(r);
+  return fitVec(r)||fitRaster(r);
 }
 function fitVec(r){
   const LV=window.lastVec;
@@ -731,12 +732,20 @@ function fitRaster(r){
   const runMin=Math.max(3,Math.round(50*s)),maxR=Math.round(4500*s);
   const cx=Math.round(r.x*WM.k),cy=Math.round(r.y*WM.k);
   const ray=(dx,dy)=>{
-    let run=0;
+    const runs=[];let run=0,st=0;
     for(let i=1;i<=maxR;i++){
       const x=cx+dx*i,y=cy+dy*i;
-      if(x<0||y<0||x>=WM.ow||y>=WM.oh)return null;
-      if(WM.m[y*WM.ow+x]){run++;if(run>=runMin){const i0=i-run+1;return{pos:dx?(cx+dx*i0)/WM.k:(cy+dy*i0)/WM.k,d:i0/s};}}
-      else run=0;
+      if(x<0||y<0||x>=WM.ow||y>=WM.oh)break;
+      if(WM.m[y*WM.ow+x]){if(!run)st=i;run++;}
+      else{if(run){runs.push({a:st,b:i-1});run=0;}}
+    }
+    if(run)runs.push({a:st,b:maxR});
+    const at=i0=>({pos:dx?(cx+dx*i0)/WM.k:(cy+dy*i0)/WM.k,d:i0/s});
+    for(let k=0;k<runs.length;k++){
+      const r0=runs[k];
+      if(r0.b-r0.a+1>=runMin)return at(r0.a); // solid band
+      const r1=runs[k+1]; // outline pair: two thin runs 40-400mm apart
+      if(r1&&(r0.b-r0.a+1)>=2){const gap=(r1.a-r0.b-1)/s;if(gap>=40&&gap<=400)return at(r0.a);}
     }
     return null;
   };
@@ -860,6 +869,8 @@ document.getElementById('addExcl').onclick=()=>{
   excls.push(e);sel={kind:'excl',ref:e};draw();renderList();
 };
 document.getElementById('showVec').onchange=draw;
+document.getElementById('wallsrc').onchange=e=>{try{localStorage.setItem('bads-wallsrc',e.target.value);}catch(_){}};
+try{const _w=localStorage.getItem('bads-wallsrc');if(_w)document.getElementById('wallsrc').value=_w;}catch(_){}
 document.getElementById('hideExcl').onchange=draw;
 document.getElementById('contrast').onchange=draw;
 document.getElementById('showIds').onchange=draw;

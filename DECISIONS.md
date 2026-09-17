@@ -317,6 +317,17 @@ Entries stay chronological; the live question is always the last entry.
   at click; autoMsg unknown — user ran Raster bands, fit result unconfirmed).
 - Status: tree clean. First action: the 3-line crop fix.
 
+## 2026-09-17 — v6.1: pair-aware rays + auto evidence mode (built, pushed)
+
+- Raster rays needed a 50mm solid run, so thin outline-pair walls never stopped them (A01
+  flakiness: worked once on solid bits). Now: solid run wins, else two thin runs 40–400mm
+  apart count as an outline-pair wall, edge at the first.
+- Evidence select gains Auto (vector→raster fallback per fit, the default); manual vector /
+  raster kept per earlier call. Selection persists in localStorage (reloads kept resetting it,
+  causing wrong-engine runs).
+- FH note: crop fix revived bed positions (green on bed); auto-seed + auto-fit should now
+  compose on FH — awaiting confirmation run.
+
 ## 2026-09-17 — morning: crop-offset fix applied (built, pushed)
 
 - Re-applied last nights reverted fix: capture page.view + rotate at render, subtract offset
