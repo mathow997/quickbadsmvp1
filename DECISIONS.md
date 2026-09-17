@@ -387,3 +387,11 @@ Entries stay chronological; the live question is always the last entry.
   self-guard). Seed path already called fitRoom directly.
 - A01 robe: net math already subtracts overlap (11.44 vs 12.45 gross proves it) — remaining gap
   is X placement, handled by bottom-corner default + click-robe + drag.
+
+## 2026-09-17 — v6.5: seed at plan dark-area centre (built, pushed)
+
+- FH autoMsg `[ras] [T1446 B706 L- R1552mm]` showed rays firing but seeded mid-sheet in empty
+  paper (page fractions assume centered plans; FH plan sits top-right). Fallback boxes now
+  center on the wall-mask dark bbox (3% page-margin excluded) with fixed sane sizes; clamp kept.
+- Removed dead R/mkRoom fraction helpers. Vector planes still absent on FH (H=0 V=0) — raster
+  is the working path there until XObject-matrix hypothesis is tested.

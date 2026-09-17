@@ -719,12 +719,14 @@ function wallMask(){
   const c=off.getContext('2d',{willReadFrequently:true});
   c.drawImage(bg,0,0,ow,oh);
   const d=c.getImageData(0,0,ow,oh).data,m=new Uint8Array(ow*oh),g=new Uint8Array(ow*oh);
-  for(let i=0;i<ow*oh;i++){const j=i*4;g[i]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);if(g[i]<140)m[i]=1;}
+  const mx=Math.round(0.03*ow),my=Math.round(0.03*oh);
+  let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
+  for(let i=0;i<ow*oh;i++){const j=i*4;g[i]=Math.round(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2]);if(g[i]<140){m[i]=1;const x=i%ow,y=(i/ow)|0;if(x>=mx&&y>=my&&x<ow-mx&&y<oh-my){if(x<bx0)bx0=x;if(y<by0)by0=y;if(x>bx1)bx1=x;if(y>by1)by1=y;}}}
   const gv=document.createElement('canvas');gv.width=ow;gv.height=oh;
   const gc=gv.getContext('2d'),gi=gc.createImageData(ow,oh);
   for(let i=0;i<ow*oh;i++){if(m[i]){gi.data[i*4+1]=200;gi.data[i*4+3]=255;}}
   gc.putImageData(gi,0,0);
-  window._wm={m,g,ow,oh,k,gv};window._wmkey=key;
+  window._wm={m,g,ow,oh,k,gv,bb:(bx1>=bx0&&by1>=by0)?{x0:bx0,y0:by0,x1:bx1,y1:by1}:null};window._wmkey=key;
   return window._wm;
 }
 function fitRaster(r){
@@ -765,7 +767,7 @@ function fitRaster(r){
 function fitAll(silent){let n=0;rooms.forEach(r=>{if(fitRoom(r))n++;});if(!silent){draw();renderList();}return n;}
 
 // ---------- bedrooms-only auto-measure (no units: one apartment per PDF) ----------
-function mkRoom(type,label,wMm,dMm,fx,fy){return{id:uid++,type,label,x:bg.width*fx,y:bg.height*fy,wMm,dMm,rot:0};}
+
 
 function biggestIsMain(){
   if(!rooms.length)return;
@@ -781,7 +783,6 @@ document.getElementById('autoBtn').onclick=async()=>{
   const wantBeds=+document.getElementById('bedcount').value||2;
   const W=bg.width,H=bg.height,s=pxPerMm;
   rooms=[];excls=[];sel=null;
-  const R=(type,label,wf,hf,fx,fy)=>({id:uid++,type,label,x:W*fx,y:H*fy,wMm:W*wf/s,dMm:H*hf/s,rot:0});
   const seeds=(window.lastVec&&window.lastVec.beds&&window.lastVec.beds.length)?window.lastVec.beds.slice().sort((a,b)=>b.w*b.h-a.w*a.h).slice(0,3):[];
   let seedMsg='';
   if(seeds.length){
@@ -797,11 +798,15 @@ document.getElementById('autoBtn').onclick=async()=>{
     });
     seedMsg='Seeded '+seeds.length+' boxes on detected beds ('+posStr.join(' ')+'). ';
   }else{
-    if(wantBeds===1){rooms.push(R('main','BEDROOM 1',0.30,0.36,0.42,0.55));}
-    if(wantBeds===2){rooms.push(R('main','BEDROOM 1',0.26,0.36,0.32,0.55));rooms.push(R('other','BEDROOM 2',0.26,0.36,0.64,0.55));}
-    if(wantBeds===3){rooms.push(R('main','BEDROOM 1',0.20,0.36,0.24,0.55));rooms.push(R('other','BEDROOM 2',0.20,0.36,0.50,0.55));rooms.push(R('other','BEDROOM 3',0.20,0.36,0.76,0.55));}
+    const WM0=wallMask();
+    let scx=W/2,scy=H/2;
+    if(WM0&&WM0.bb){scx=(WM0.bb.x0+WM0.bb.x1)/2/WM0.k;scy=(WM0.bb.y0+WM0.bb.y1)/2/WM0.k;}
+    const put=(type,label,wMm,dMm,oxMm,oyMm)=>{rooms.push({id:uid++,type,label,x:scx+oxMm*s,y:scy+oyMm*s,wMm,dMm,rot:0});};
+    if(wantBeds===1){put('main','BEDROOM 1',3400,3400,0,0);}
+    if(wantBeds===2){put('main','BEDROOM 1',3400,3200,-1600,0);put('other','BEDROOM 2',3400,3200,1600,0);}
+    if(wantBeds===3){put('main','BEDROOM 1',3200,3000,-1800,0);put('other','BEDROOM 2',3200,3000,0,0);put('other','BEDROOM 3',3200,3000,1800,0);}
     rooms.forEach(r=>{r.wMm=Math.min(r.wMm,5000);r.dMm=Math.min(r.dMm,5000);});
-    seedMsg='No beds detected — placed '+wantBeds+' fallback boxes. ';
+    seedMsg='No beds detected — placed '+wantBeds+' fallback boxes at plan dark-area centre. ';
   }
   rooms.forEach(r=>{
     const hw=((r.rot%180===0)?r.wMm:r.dMm)*s/2;
